@@ -33,6 +33,17 @@ async function postJson<T>(url: string, payload: unknown) {
   return (await response.json()) as T;
 }
 
+function getImageAssistLabel(mode: SearchResponse["imageAssistMode"]) {
+  switch (mode) {
+    case "hybrid-vision":
+      return "스케치+비전";
+    case "sketch-structure":
+      return "스케치 구조 반영";
+    default:
+      return "텍스트 중심";
+  }
+}
+
 export function SearchExperience() {
   const canvasRef = useRef<SketchCanvasHandle>(null);
   const resultSectionRef = useRef<HTMLElement | null>(null);
@@ -54,6 +65,7 @@ export function SearchExperience() {
         locale: "ko-KR",
         sketchDataUrl: sketch?.dataUrl ?? null,
         hasDrawing: sketch?.hasDrawing ?? false,
+        sketchSummary: sketch?.summary ?? null,
         userText,
       };
 
@@ -225,7 +237,8 @@ export function SearchExperience() {
           )}
         </button>
         <div className="mt-3 rounded-[20px] border border-dashed border-[color:var(--surface-border)] px-4 py-3 text-sm text-[color:var(--ink-soft)]">
-          무료 추론이 실패하면 설명 텍스트를 중심으로 fallback 검색을 수행합니다.
+          손그림 구조는 항상 검색어에 반영하고, 비전 추론이 가능하면 픽셀 기반
+          후보도 함께 섞습니다.
         </div>
         {errorMessage ? (
           <p className="mt-3 rounded-[18px] bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -246,8 +259,13 @@ export function SearchExperience() {
                 가장 가능성이 높은 정체와 검색어를 먼저 보여드립니다.
               </p>
             </div>
-            <div className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[color:var(--ink-soft)]">
-              {result.providerMode === "live" ? "NAVER live" : "Demo fallback"}
+            <div className="flex flex-wrap justify-end gap-2">
+              <div className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[color:var(--ink-soft)]">
+                {getImageAssistLabel(result.imageAssistMode)}
+              </div>
+              <div className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[color:var(--ink-soft)]">
+                {result.providerMode === "live" ? "NAVER live" : "Demo fallback"}
+              </div>
             </div>
           </div>
 
@@ -344,6 +362,25 @@ export function SearchExperience() {
               ))}
             </div>
           </div>
+
+          {result.reasoning.length ? (
+            <div className="mt-5 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
+                <BadgeInfo className="size-4" />
+                검색에 반영한 힌트
+              </div>
+              <ul className="space-y-2 text-sm leading-6 text-[color:var(--ink-soft)]">
+                {result.reasoning.slice(0, 4).map((item) => (
+                  <li
+                    key={item}
+                    className="rounded-[18px] bg-[color:var(--surface-strong)] px-3 py-2"
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="mt-5">
             <div className="mb-3 flex items-center justify-between">

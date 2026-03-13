@@ -19,6 +19,8 @@ describe("searchSketch", () => {
     expect(result.imageAssistMode).toBe("sketch-structure");
     expect(result.providerMode).toBe("mock");
     expect(result.candidateEntities[0]?.label).toBe("루이비통");
+    expect(result.searchPrompts[0]).toContain("루이비통");
+    expect(result.regenerationPrompt).toContain("루이비통");
     expect(result.naverResults.length).toBeGreaterThan(0);
   });
 
@@ -39,6 +41,7 @@ describe("searchSketch", () => {
     expect(
       result.reasoning.some((item) => item.includes("fallback")),
     ).toBeTruthy();
+    expect(result.searchPrompts.length).toBeGreaterThan(0);
     expect(result.queryVariants.length).toBeGreaterThan(0);
   });
 
@@ -71,6 +74,7 @@ describe("searchSketch", () => {
     );
 
     expect(result.naverResults[0]?.title).toBe("운동화 결과");
+    expect(result.searchPrompts[0]).toContain("운동화");
   });
 
   it("uses sketch structure to expand candidate entities", async () => {
@@ -117,5 +121,9 @@ describe("searchSketch", () => {
     expect(
       result.queryVariants.some((query) => query.includes("가로형")),
     ).toBeTruthy();
+    expect(
+      result.searchPrompts.some((query) => query.includes("반복 패턴")),
+    ).toBeTruthy();
+    expect(result.regenerationPrompt).toContain("스케치 구조");
   });
 });

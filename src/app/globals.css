@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fcf4e8;
+  --foreground: #21120b;
+  --surface: rgba(255, 248, 238, 0.82);
+  --surface-strong: rgba(255, 250, 243, 0.94);
+  --surface-border: rgba(66, 33, 16, 0.12);
+  --accent: #f16d26;
+  --accent-deep: #ad3b00;
+  --accent-soft: #ffd7b5;
+  --ink-soft: #695447;
+  --grid-line: rgba(90, 47, 20, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), sans-serif;
+  background-image:
+    radial-gradient(circle at top, rgba(241, 109, 38, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+    linear-gradient(90deg, transparent 0 24px, var(--grid-line) 24px 25px),
+    linear-gradient(transparent 0 24px, var(--grid-line) 24px 25px);
+  background-size: auto, auto, 25px 25px, 25px 25px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(241, 109, 38, 0.25);
+}
+
+.paper-panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow:
+    0 16px 36px rgba(104, 57, 26, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(18px);
+}
+
+.ink-title {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.subtle-scrollbar {
+  scrollbar-color: rgba(173, 59, 0, 0.25) transparent;
+}
+
+.subtle-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.subtle-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(173, 59, 0, 0.25);
+  border-radius: 999px;
+}
+
+.excalidraw-wrapper .excalidraw {
+  --color-primary: var(--accent);
+  --color-primary-darker: var(--accent-deep);
+  --island-bg-color: rgba(255, 250, 243, 0.92);
+  --popup-bg-color: rgba(255, 250, 243, 0.96);
+  --popup-secondary-bg-color: rgba(252, 244, 232, 0.92);
+  --overlay-bg-color: rgba(22, 12, 8, 0.45);
+}

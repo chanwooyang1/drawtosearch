@@ -3,8 +3,9 @@ import { randomUUID } from "crypto";
 import { recordSearchSession } from "@/lib/db/events";
 
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
+import { buildPromptPlan } from "./prompt";
 import { buildHandoffUrls, fetchGoogleCustomSearch, fetchNaverResults } from "./providers";
-import { dedupeStrings, normalizeSearchText, summarizeTopQuery } from "./query";
+import { dedupeStrings, normalizeSearchText } from "./query";
 import type { EntityCandidate, SearchInput, SearchResponse } from "./types";
 import { interpretWithVision } from "./vision";
 
@@ -61,16 +62,17 @@ export async function searchSketch(
   const queryVariants = dedupeStrings(
     candidateEntities.flatMap((candidate) => candidate.queryVariants),
   ).slice(0, 6);
+  const promptPlan = buildPromptPlan(input, candidateEntities);
 
-  const naverResult = await naverSearch(queryVariants, candidateEntities);
-  const googleFeatureResult = await googleSearch(queryVariants[0] ?? "");
+  const naverResult = await naverSearch(promptPlan.searchPrompts, candidateEntities);
+  const googleFeatureResult = await googleSearch(promptPlan.searchPrompts[0] ?? "");
 
   const mergedResults =
     googleFeatureResult.length && naverResult.mode === "live"
       ? [...naverResult.items, ...googleFeatureResult].slice(0, 8)
       : naverResult.items.slice(0, 8);
 
-  const topQuery = summarizeTopQuery(candidateEntities, input.userText);
+  const topQuery = promptPlan.searchPrompts[0] ?? queryVariants[0] ?? "스케치 이미지 검색";
   const topCandidate = candidateEntities[0];
   const sessionId = randomUUID();
   const imageAssistMode =
@@ -85,7 +87,7 @@ export async function searchSketch(
     confidence: topCandidate?.confidence ?? 0,
     locale: input.locale,
     providerMode: naverResult.mode,
-    queryVariants,
+    queryVariants: promptPlan.searchPrompts,
     sessionId,
     topEntity: topCandidate?.label ?? "이미지 후보",
     topQuery,
@@ -99,7 +101,9 @@ export async function searchSketch(
     naverResults: mergedResults,
     providerMode: naverResult.mode,
     queryVariants,
-    reasoning: [...heuristic.reasoning, ...visionReasoning],
+    regenerationPrompt: promptPlan.regenerationPrompt,
+    reasoning: [...heuristic.reasoning, ...promptPlan.promptReasoning, ...visionReasoning],
+    searchPrompts: promptPlan.searchPrompts,
     sessionId,
   };
 }

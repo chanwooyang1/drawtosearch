@@ -65,7 +65,9 @@ export type SearchResponse = {
   naverResults: SearchImageResult[];
   providerMode: ProviderMode;
   queryVariants: string[];
+  regenerationPrompt: string | null;
   reasoning: string[];
+  searchPrompts: string[];
   sessionId: string;
 };
 

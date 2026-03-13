@@ -7,7 +7,7 @@ describe("searchSketch", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns mock results without provider keys", async () => {
+  it("returns generic mock results without hardcoded brand assumptions", async () => {
     const result = await searchSketch({
       hasDrawing: true,
       locale: "ko-KR",
@@ -18,9 +18,9 @@ describe("searchSketch", () => {
 
     expect(result.imageAssistMode).toBe("sketch-structure");
     expect(result.providerMode).toBe("mock");
-    expect(result.candidateEntities[0]?.label).toBe("루이비통");
-    expect(result.searchPrompts[0]).toContain("루이비통");
-    expect(result.regenerationPrompt).toContain("루이비통");
+    expect(result.candidateEntities[0]?.label).not.toBe("루이비통");
+    expect(result.searchPrompts.join(" ")).not.toMatch(/루이비통|샤넬|나이키|크롬/i);
+    expect(result.regenerationPrompt).toContain("갈색");
     expect(result.naverResults.length).toBeGreaterThan(0);
   });
 
@@ -130,7 +130,7 @@ describe("searchSketch", () => {
     expect(result.regenerationPrompt).toContain("스케치 구조");
   });
 
-  it("identifies chrome-like browser icon hints early", async () => {
+  it("keeps browser color hints generic until search evidence narrows them", async () => {
     const result = await searchSketch(
       {
         hasDrawing: true,
@@ -166,8 +166,8 @@ describe("searchSketch", () => {
       },
     );
 
-    expect(result.candidateEntities[0]?.label).toBe("구글 크롬");
-    expect(result.searchPrompts[0]).toContain("구글 크롬");
+    expect(result.candidateEntities[0]?.label).not.toBe("구글 크롬");
+    expect(result.searchPrompts.join(" ")).not.toMatch(/구글 크롬|chrome/i);
     expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
   });
 

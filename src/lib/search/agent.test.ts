@@ -29,25 +29,24 @@ function createBrowserInput(): SearchInput {
       },
     },
     userText:
-      "인터넷 브라우저에서 봤고 흰색 파란색 초록색 노란색이 있는 동그란 마크 같아요",
+      "원격 지원 프로그램 화면에서 봤고 흰색이랑 파란색이 보이는 동그란 로고 같아요",
   };
 }
 
 function createSeedCandidates(): EntityCandidate[] {
   return [
     {
-      confidence: 0.88,
-      id: "chrome-seed",
-      label: "구글 크롬",
-      query: "구글 크롬 로고 아이콘",
+      confidence: 0.68,
+      id: "generic-service-seed",
+      label: "앱 아이콘 또는 서비스 심볼",
+      query: "앱 아이콘 또는 서비스 로고 reference",
       queryVariants: buildQueryVariants({
-        label: "구글 크롬",
-        query: "구글 크롬 로고 아이콘",
-        userText:
-          "인터넷 브라우저에서 봤고 흰색 파란색 초록색 노란색이 있는 동그란 마크 같아요",
+        label: "앱 아이콘 또는 서비스 심볼",
+        query: "앱 아이콘 또는 서비스 로고 reference",
+        userText: "원격 지원 프로그램 화면에서 봤고 흰색이랑 파란색이 보이는 동그란 로고 같아요",
       }),
       rationale:
-        "브라우저 맥락과 원형의 다색 아이콘 단서가 구글 크롬을 시사합니다.",
+        "서비스나 앱 화면에서 본 심볼일 가능성을 넓게 두는 초기 가설입니다.",
       source: "heuristic",
     },
   ];
@@ -59,54 +58,54 @@ function createReasoningAgent(): SearchReasoningAgent {
       candidateEntities: [
         {
           confidence: 0.93,
-          label: "구글 크롬",
-          query: "Google Chrome app icon official",
-          rationale: "검색 결과 제목에서 Chrome과 icon 단서가 반복됩니다.",
+          label: "팀뷰어",
+          query: "TeamViewer logo icon official",
+          rationale: "검색 결과 제목에서 TeamViewer와 원격 지원 단서가 반복됩니다.",
         },
       ],
       observations: [
-        "Chrome 문자열이 반복되어 후보가 명확해졌습니다.",
-        "브라우저 아이콘 맥락이 강합니다.",
+        "TeamViewer 문자열이 반복되어 후보가 명확해졌습니다.",
+        "원격 지원 프로그램 맥락이 강합니다.",
       ],
       outcome: "refine",
-      resultFocus: ["chrome", "app icon", "browser"],
+      resultFocus: ["teamviewer", "remote support", "logo"],
       searchQueries: [
-        "Google Chrome app icon official",
-        "구글 크롬 브라우저 로고 아이콘",
+        "TeamViewer logo icon official",
+        "팀뷰어 로고 아이콘",
       ],
     }),
     planSearch: vi.fn().mockResolvedValue({
       candidateEntities: [
         {
           confidence: 0.91,
-          label: "구글 크롬",
-          query: "구글 크롬 브라우저 로고 아이콘",
-          rationale: "브라우저와 원형 다색 아이콘 단서가 구글 크롬과 가장 잘 맞습니다.",
+          label: "팀뷰어",
+          query: "팀뷰어 로고 아이콘",
+          rationale: "파란색과 흰색, 원형에 가까운 서비스 로고 단서가 팀뷰어와 잘 맞습니다.",
         },
       ],
       observations: [
-        "브라우저에서 본 원형 아이콘입니다.",
-        "파랑, 초록, 노랑 계열 색 단서가 있습니다.",
+        "원격 지원 프로그램에서 본 서비스 로고입니다.",
+        "파랑과 흰색 계열 색 단서가 있습니다.",
       ],
-      searchIntent: "실제 브라우저 아이콘을 찾기 위한 이미지 검색",
+      searchIntent: "실제 서비스 로고를 찾기 위한 이미지 검색",
       searchQueries: [
-        "구글 크롬 브라우저 로고 아이콘",
-        "google chrome browser icon official",
+        "팀뷰어 로고 아이콘",
+        "teamviewer logo icon official",
       ],
     }),
     selectBest: vi.fn().mockResolvedValue({
       candidateEntities: [
         {
           confidence: 0.95,
-          label: "구글 크롬",
-          query: "Google Chrome app icon official",
-          rationale: "원형 4색 브라우저 아이콘 단서와 검색 결과 제목이 구글 크롬과 일치합니다.",
+          label: "팀뷰어",
+          query: "TeamViewer logo icon official",
+          rationale: "파란색/흰색 서비스 로고 단서와 검색 결과 제목이 팀뷰어와 일치합니다.",
         },
       ],
-      observations: ["원형 브라우저 아이콘과 검색 결과가 일치합니다."],
-      resultFocus: ["chrome", "browser icon", "official"],
-      summary: "브라우저 아이콘 단서와 검색 결과를 종합하면 구글 크롬이 가장 유력합니다.",
-      topQuery: "Google Chrome app icon official",
+      observations: ["원격 지원 프로그램 로고와 검색 결과가 일치합니다."],
+      resultFocus: ["teamviewer", "remote support", "official"],
+      summary: "색상과 서비스 맥락을 종합하면 팀뷰어가 가장 유력합니다.",
+      topQuery: "TeamViewer logo icon official",
     }),
   };
 }
@@ -152,20 +151,20 @@ describe("runSearchAgent", () => {
       .mockResolvedValueOnce({
         items: [
           {
-            id: "chrome-1",
-            link: "https://example.com/chrome-1",
-            query: "구글 크롬 브라우저 로고 아이콘",
+            id: "teamviewer-1",
+            link: "https://example.com/teamviewer-1",
+            query: "팀뷰어 로고 아이콘",
             source: "mock",
             thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
-            title: "Google Chrome browser icon png",
+            title: "TeamViewer logo icon png",
           },
           {
-            id: "chrome-2",
-            link: "https://example.com/chrome-2",
-            query: "구글 크롬 브라우저 로고 아이콘",
+            id: "teamviewer-2",
+            link: "https://example.com/teamviewer-2",
+            query: "팀뷰어 로고 아이콘",
             source: "mock",
             thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
-            title: "Google Chrome logo official icon",
+            title: "TeamViewer remote support official icon",
           },
         ],
         mode: "mock",
@@ -173,12 +172,12 @@ describe("runSearchAgent", () => {
       .mockResolvedValueOnce({
         items: [
           {
-            id: "chrome-3",
-            link: "https://example.com/chrome-3",
-            query: "Google Chrome app icon official",
+            id: "teamviewer-3",
+            link: "https://example.com/teamviewer-3",
+            query: "TeamViewer logo icon official",
             source: "mock",
             thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
-            title: "Google Chrome app icon official svg",
+            title: "TeamViewer logo icon official svg",
           },
         ],
         mode: "mock",
@@ -187,12 +186,12 @@ describe("runSearchAgent", () => {
     const result = await runSearchAgent(createBrowserInput(), createSeedCandidates(), {
       googleSearch: vi.fn().mockResolvedValue([
         {
-          id: "chrome-google",
-          link: "https://example.com/chrome-google",
-          query: "Google Chrome app icon official",
+          id: "teamviewer-google",
+          link: "https://example.com/teamviewer-google",
+          query: "TeamViewer logo icon official",
           source: "google",
           thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
-          title: "Google Chrome browser icon pack",
+          title: "TeamViewer logo mark pack",
         },
       ]),
       naverSearch,
@@ -200,10 +199,11 @@ describe("runSearchAgent", () => {
     });
 
     expect(result.engine).toBe("langgraph-upstage");
-    expect(result.candidateEntities[0]?.label).toBe("구글 크롬");
-    expect(result.searchPrompts[0]).toContain("Chrome");
+    expect(result.candidateEntities[0]?.label).toBe("팀뷰어");
+    expect(result.searchPrompts[0]?.toLowerCase()).toContain("teamviewer");
+    expect(result.searchPrompts.join(" ")).not.toMatch(/크롬|chrome/i);
     expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
-    expect(result.topQuery).toBe("Google Chrome app icon official");
+    expect(result.topQuery).toBe("TeamViewer logo icon official");
     expect(result.searchTrace.map((item) => item.stage)).toEqual([
       "plan",
       "search",
@@ -230,6 +230,6 @@ describe("runSearchAgent", () => {
 
     expect(result.engine).toBe("rule-based");
     expect(result.searchTrace[0]?.stage).toBe("fallback");
-    expect(result.searchPrompts[0]).toContain("구글 크롬");
+    expect(result.searchPrompts.join(" ")).not.toMatch(/구글 크롬|chrome/i);
   });
 });

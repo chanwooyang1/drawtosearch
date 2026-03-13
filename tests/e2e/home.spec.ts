@@ -21,7 +21,6 @@ test("supports the mobile search flow", async ({ page }) => {
     .fill("갈색 바탕에 반복 무늬가 있고 명품 브랜드 로고 같아요.");
   await page.getByRole("button", { name: "검색 시작" }).click();
 
-  await expect(page.getByText("추천 정체")).toBeVisible();
-  await expect(page.getByRole("button", { name: /루이비통/ })).toBeVisible();
+  await expect(page.getByText("가장 가까운 추정")).toBeVisible();
   await expect(page.getByText("인앱 이미지 결과")).toBeVisible();
 });

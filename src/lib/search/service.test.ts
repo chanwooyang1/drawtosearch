@@ -46,6 +46,20 @@ describe("searchSketch", () => {
   });
 
   it("supports injected providers for deterministic ranking", async () => {
+    const naverSearch = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "mock-result",
+          link: "https://example.com/sneaker",
+          query: "운동화 제품 이미지",
+          source: "mock",
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "운동화 결과",
+        },
+      ],
+      mode: "mock",
+    });
+
     const result = await searchSketch(
       {
         hasDrawing: false,
@@ -56,25 +70,14 @@ describe("searchSketch", () => {
       },
       {
         googleSearch: vi.fn().mockResolvedValue([]),
-        naverSearch: vi.fn().mockResolvedValue({
-          items: [
-            {
-              id: "mock-result",
-              link: "https://example.com/sneaker",
-              query: "운동화 제품 이미지",
-              source: "mock",
-              thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
-              title: "운동화 결과",
-            },
-          ],
-          mode: "mock",
-        }),
+        naverSearch,
         persistSession: vi.fn().mockResolvedValue(undefined),
       },
     );
 
     expect(result.naverResults[0]?.title).toBe("운동화 결과");
     expect(result.searchPrompts[0]).toContain("운동화");
+    expect(naverSearch).toHaveBeenCalled();
   });
 
   it("uses sketch structure to expand candidate entities", async () => {
@@ -125,5 +128,69 @@ describe("searchSketch", () => {
       result.searchPrompts.some((query) => query.includes("반복 패턴")),
     ).toBeTruthy();
     expect(result.regenerationPrompt).toContain("스케치 구조");
+  });
+
+  it("refines prompts after reading first-pass search results", async () => {
+    const naverSearch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "nike-1",
+            link: "https://example.com/nike-1",
+            query: "운동화 제품 이미지",
+            source: "mock",
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "NIKE Air Max 97 Sneakers",
+          },
+          {
+            id: "nike-2",
+            link: "https://example.com/nike-2",
+            query: "운동화 제품 이미지",
+            source: "mock",
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "NIKE Air Max official product",
+          },
+        ],
+        mode: "mock",
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "nike-3",
+            link: "https://example.com/nike-3",
+            query: "스니커즈 NIKE reference image",
+            source: "mock",
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "NIKE Air Max 97 official",
+          },
+        ],
+        mode: "mock",
+      });
+
+    const result = await searchSketch(
+      {
+        hasDrawing: false,
+        locale: "ko-KR",
+        sketchDataUrl: null,
+        sketchSummary: null,
+        userText: "운동화처럼 보이는 실루엣",
+      },
+      {
+        googleSearch: vi.fn().mockResolvedValue([]),
+        naverSearch,
+        persistSession: vi.fn().mockResolvedValue(undefined),
+      },
+    );
+
+    expect(naverSearch).toHaveBeenCalledTimes(2);
+    expect(
+      result.searchPrompts.some((query) => query.toLowerCase().includes("nike")),
+    ).toBeTruthy();
+    expect(
+      result.candidateEntities.some((candidate) =>
+        candidate.label.toLowerCase().includes("nike"),
+      ),
+    ).toBeTruthy();
   });
 });

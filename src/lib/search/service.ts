@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 
 import { recordSearchSession } from "@/lib/db/events";
 
-import { runSearchAgent } from "./agent";
+import { runSearchAgent, type SearchAgentDependencies } from "./agent";
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
 import { buildPromptPlan } from "./prompt";
 import { buildHandoffUrls, fetchGoogleCustomSearch, fetchNaverResults } from "./providers";
@@ -14,6 +14,8 @@ type SearchDependencies = {
   googleSearch?: typeof fetchGoogleCustomSearch;
   naverSearch?: typeof fetchNaverResults;
   persistSession?: typeof recordSearchSession;
+  reasoningAgent?: SearchAgentDependencies["reasoningAgent"];
+  searchAgent?: typeof runSearchAgent;
   visionInterpreter?: typeof interpretWithVision;
 };
 
@@ -24,6 +26,8 @@ export async function searchSketch(
   const googleSearch = dependencies.googleSearch ?? fetchGoogleCustomSearch;
   const naverSearch = dependencies.naverSearch ?? fetchNaverResults;
   const persistSession = dependencies.persistSession ?? recordSearchSession;
+  const reasoningAgent = dependencies.reasoningAgent;
+  const searchAgent = dependencies.searchAgent ?? runSearchAgent;
   const visionInterpreter = dependencies.visionInterpreter ?? interpretWithVision;
   const heuristic = interpretWithHeuristics(input);
   let visionReasoning: string[] = [];
@@ -64,9 +68,10 @@ export async function searchSketch(
     candidateEntities.flatMap((candidate) => candidate.queryVariants),
   ).slice(0, 6);
   const promptPlan = buildPromptPlan(input, candidateEntities);
-  const agentResult = await runSearchAgent(input, candidateEntities, {
+  const agentResult = await searchAgent(input, candidateEntities, {
     googleSearch,
     naverSearch,
+    reasoningAgent,
   });
   const finalCandidates = agentResult.candidateEntities.length
     ? agentResult.candidateEntities
@@ -86,6 +91,7 @@ export async function searchSketch(
       "[drawtosearch-agent]",
       JSON.stringify({
         sessionId,
+        engine: agentResult.engine,
         trace: agentResult.searchTrace,
       }),
     );

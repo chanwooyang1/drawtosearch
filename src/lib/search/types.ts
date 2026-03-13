@@ -1,4 +1,4 @@
-export type CandidateSource = "heuristic" | "sketch" | "vision" | "merged";
+export type CandidateSource = "agent" | "heuristic" | "sketch" | "vision" | "merged";
 export type ProviderMode = "live" | "mock";
 export type ImageAssistMode = "text-only" | "sketch-structure" | "hybrid-vision";
 export type SketchAspectBucket = "wide" | "tall" | "square";

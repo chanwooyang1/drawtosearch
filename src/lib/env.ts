@@ -20,10 +20,13 @@ const envSchema = z.object({
     .default("Qwen/Qwen2.5-VL-3B-Instruct"),
   NAVER_CLIENT_ID: optionalEnvString,
   NAVER_CLIENT_SECRET: optionalEnvString,
+  UPSTAGE_API_KEY: optionalEnvString,
+  UPSTAGE_MODEL: z.string().min(1).default("solar-pro2"),
 });
 
 export const env = envSchema.parse({
   ...process.env,
   HUGGINGFACE_VISION_MODEL:
     process.env.HUGGINGFACE_VISION_MODEL ?? "Qwen/Qwen2.5-VL-3B-Instruct",
+  UPSTAGE_MODEL: process.env.UPSTAGE_MODEL ?? "solar-pro2",
 });

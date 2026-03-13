@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createSearchPolicyEngine } from "@/lib/policy/engine";
+
 import { runSearchAgent } from "./agent";
 import { buildQueryVariants } from "./query";
 import { resolveReasoningGateway } from "./upstage-agent";
-import type { SearchReasoningAgent } from "./agent";
 import type { EntityCandidate, SearchInput } from "./types";
 
 function createBrowserInput(): SearchInput {
@@ -52,64 +53,6 @@ function createSeedCandidates(): EntityCandidate[] {
   ];
 }
 
-function createReasoningAgent(): SearchReasoningAgent {
-  return {
-    assessResults: vi.fn().mockResolvedValue({
-      candidateEntities: [
-        {
-          confidence: 0.93,
-          label: "팀뷰어",
-          query: "TeamViewer logo icon official",
-          rationale: "검색 결과 제목에서 TeamViewer와 원격 지원 단서가 반복됩니다.",
-        },
-      ],
-      observations: [
-        "TeamViewer 문자열이 반복되어 후보가 명확해졌습니다.",
-        "원격 지원 프로그램 맥락이 강합니다.",
-      ],
-      outcome: "refine",
-      resultFocus: ["teamviewer", "remote support", "logo"],
-      searchQueries: [
-        "TeamViewer logo icon official",
-        "팀뷰어 로고 아이콘",
-      ],
-    }),
-    planSearch: vi.fn().mockResolvedValue({
-      candidateEntities: [
-        {
-          confidence: 0.91,
-          label: "팀뷰어",
-          query: "팀뷰어 로고 아이콘",
-          rationale: "파란색과 흰색, 원형에 가까운 서비스 로고 단서가 팀뷰어와 잘 맞습니다.",
-        },
-      ],
-      observations: [
-        "원격 지원 프로그램에서 본 서비스 로고입니다.",
-        "파랑과 흰색 계열 색 단서가 있습니다.",
-      ],
-      searchIntent: "실제 서비스 로고를 찾기 위한 이미지 검색",
-      searchQueries: [
-        "팀뷰어 로고 아이콘",
-        "teamviewer logo icon official",
-      ],
-    }),
-    selectBest: vi.fn().mockResolvedValue({
-      candidateEntities: [
-        {
-          confidence: 0.95,
-          label: "팀뷰어",
-          query: "TeamViewer logo icon official",
-          rationale: "파란색/흰색 서비스 로고 단서와 검색 결과 제목이 팀뷰어와 일치합니다.",
-        },
-      ],
-      observations: ["원격 지원 프로그램 로고와 검색 결과가 일치합니다."],
-      resultFocus: ["teamviewer", "remote support", "official"],
-      summary: "색상과 서비스 맥락을 종합하면 팀뷰어가 가장 유력합니다.",
-      topQuery: "TeamViewer logo icon official",
-    }),
-  };
-}
-
 describe("runSearchAgent", () => {
   it("prefers LiteLLM when a proxy base is configured", () => {
     const gateway = resolveReasoningGateway({
@@ -146,6 +89,61 @@ describe("runSearchAgent", () => {
   });
 
   it("uses LangGraph reasoning to refine toward the real-world target", async () => {
+    const planSearch = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.91,
+          label: "팀뷰어",
+          query: "팀뷰어 로고 아이콘",
+          rationale: "파란색과 흰색, 원형에 가까운 서비스 로고 단서가 팀뷰어와 잘 맞습니다.",
+        },
+      ],
+      observations: [
+        "원격 지원 프로그램에서 본 서비스 로고입니다.",
+        "파랑과 흰색 계열 색 단서가 있습니다.",
+      ],
+      searchIntent: "실제 서비스 로고를 찾기 위한 이미지 검색",
+      searchQueries: [
+        "팀뷰어 로고 아이콘",
+        "teamviewer logo icon official",
+      ],
+    });
+    const assessResults = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.93,
+          label: "팀뷰어",
+          query: "TeamViewer logo icon official",
+          rationale: "검색 결과 제목에서 TeamViewer와 원격 지원 단서가 반복됩니다.",
+        },
+      ],
+      observations: [
+        "TeamViewer 문자열이 반복되어 후보가 명확해졌습니다.",
+        "원격 지원 프로그램 맥락이 강합니다.",
+      ],
+      outcome: "refine",
+      resultFocus: ["teamviewer", "remote support", "logo"],
+      searchQueries: [
+        "TeamViewer logo icon official",
+        "팀뷰어 로고 아이콘",
+      ],
+    });
+    const policyEngine = {
+      selectPlanPolicy: vi.fn().mockResolvedValue({
+        actionName: "service_icon",
+        contextBucket: "service_icon|high|round|2|unnamed",
+        directiveText: "Prioritize service icon hypotheses.",
+        explorationScore: 0.92,
+        policyVersion: "plan-v2",
+      }),
+      selectRefinePolicy: vi.fn().mockResolvedValue({
+        actionName: "refine_by_context",
+        contextBucket: "service_icon|high|round|2|unnamed",
+        directiveText: "Use viewing context first.",
+        explorationScore: 0.84,
+        policyVersion: "refine-v3",
+      }),
+    };
     const naverSearch = vi
       .fn()
       .mockResolvedValueOnce({
@@ -195,22 +193,57 @@ describe("runSearchAgent", () => {
         },
       ]),
       naverSearch,
-      reasoningAgent: createReasoningAgent(),
+      policyEngine,
+      reasoningAgent: {
+        assessResults,
+        planSearch,
+        selectBest: vi.fn().mockResolvedValue({
+          candidateEntities: [
+            {
+              confidence: 0.95,
+              label: "팀뷰어",
+              query: "TeamViewer logo icon official",
+              rationale: "파란색/흰색 서비스 로고 단서와 검색 결과 제목이 팀뷰어와 일치합니다.",
+            },
+          ],
+          observations: ["원격 지원 프로그램 로고와 검색 결과가 일치합니다."],
+          resultFocus: ["teamviewer", "remote support", "official"],
+          summary: "색상과 서비스 맥락을 종합하면 팀뷰어가 가장 유력합니다.",
+          topQuery: "TeamViewer logo icon official",
+        }),
+      },
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      visionCandidates: [],
     });
 
     expect(result.engine).toBe("langgraph-upstage");
     expect(result.candidateEntities[0]?.label).toBe("팀뷰어");
+    expect(result.policyDecisions).toHaveLength(2);
+    expect(result.policyDecisions[0]?.actionName).toBe("service_icon");
+    expect(result.policyDecisions[1]?.actionName).toBe("refine_by_context");
     expect(result.searchPrompts[0]?.toLowerCase()).toContain("teamviewer");
     expect(result.searchPrompts.join(" ")).not.toMatch(/크롬|chrome/i);
     expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
     expect(result.topQuery).toBe("TeamViewer logo icon official");
     expect(result.searchTrace.map((item) => item.stage)).toEqual([
+      "policy-plan",
       "plan",
       "search",
+      "policy-refine",
       "assess",
       "refine",
       "select",
     ]);
+    expect(planSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyDirective: "Prioritize service icon hypotheses.",
+      }),
+    );
+    expect(assessResults).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategyDirective: "Use viewing context first.",
+      }),
+    );
     expect(naverSearch).toHaveBeenCalledTimes(2);
   });
 
@@ -226,10 +259,38 @@ describe("runSearchAgent", () => {
         planSearch: vi.fn().mockRejectedValue(new Error("upstage unavailable")),
         selectBest: vi.fn(),
       },
+      sessionId: "22222222-2222-4222-8222-222222222222",
+      visionCandidates: [],
     });
 
     expect(result.engine).toBe("rule-based");
+    expect(result.policyDecisions).toEqual([]);
     expect(result.searchTrace[0]?.stage).toBe("fallback");
     expect(result.searchPrompts.join(" ")).not.toMatch(/구글 크롬|chrome/i);
+  });
+
+  it("returns neutral directives when no policy snapshot is active", async () => {
+    const engine = createSearchPolicyEngine();
+
+    const plan = await engine.selectPlanPolicy({
+      context: {
+        aspectBucket: "square",
+        colorHintCount: "2",
+        colorTokens: ["blue", "white"],
+        evidenceStrength: "medium",
+        hasDrawing: true,
+        hasExplicitName: false,
+        hasTextHint: true,
+        intentSurface: "service_icon",
+        resultCoherence: "none",
+        resultEntityRepeatCount: 0,
+        shapeFamily: "round",
+        visionLabelCount: 0,
+      },
+      sessionId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    expect(plan.actionName).toBe("neutral");
+    expect(plan.policyVersion).toBe("neutral-v1");
   });
 });

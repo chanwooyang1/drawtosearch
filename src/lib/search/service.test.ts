@@ -80,6 +80,85 @@ describe("searchSketch", () => {
     expect(naverSearch).toHaveBeenCalled();
   });
 
+  it("persists policy decisions with the same generated session id", async () => {
+    const persistPolicyDecisions = vi.fn().mockResolvedValue(undefined);
+    const persistSession = vi.fn().mockResolvedValue(undefined);
+    const searchAgent = vi.fn().mockImplementation(async (_input, candidates, dependencies) => ({
+      candidateEntities: candidates,
+      engine: "rule-based",
+      policyDecisions: [
+        {
+          actionName: "neutral",
+          contextBucket: "unknown|low|unknown|0|unnamed",
+          contextFeatures: {
+            aspectBucket: "unknown",
+            colorHintCount: "0",
+            colorTokens: [],
+            evidenceStrength: "low",
+            hasDrawing: false,
+            hasExplicitName: false,
+            hasTextHint: true,
+            intentSurface: "unknown",
+            resultCoherence: "none",
+            resultEntityRepeatCount: 0,
+            shapeFamily: "unknown",
+            visionLabelCount: 0,
+          },
+          createdAt: new Date("2026-03-14T00:00:00.000Z"),
+          directiveText: "Keep it broad.",
+          explorationScore: 0,
+          id: "policy-plan",
+          policyFamily: "plan_policy",
+          policyVersion: "neutral-v1",
+          sessionId: dependencies.sessionId,
+          stage: "plan",
+        },
+      ],
+      providerMode: "mock",
+      searchPrompts: ["일반 로고 reference"],
+      searchTrace: [],
+      topQuery: "일반 로고 reference",
+      totalResults: [],
+    }));
+
+    const result = await searchSketch(
+      {
+        hasDrawing: false,
+        locale: "ko-KR",
+        sketchDataUrl: null,
+        sketchSummary: null,
+        userText: "파란색과 흰색 로고 같아요",
+      },
+      {
+        persistPolicyDecisions,
+        persistSession,
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    expect(searchAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Array),
+      expect.objectContaining({
+        sessionId: result.sessionId,
+      }),
+    );
+    expect(persistSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: result.sessionId,
+      }),
+    );
+    expect(persistPolicyDecisions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        sessionId: result.sessionId,
+      }),
+    ]);
+  });
+
   it("uses sketch structure to expand candidate entities", async () => {
     const result = await searchSketch(
       {

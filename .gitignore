@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+
+# Dependency directories
+node_modules/
+.venv/
+venv/
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Python cache
+__pycache__/
+*.pyc

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 
 import { recordSearchSession } from "@/lib/db/events";
 
+import { runSearchAgent } from "./agent";
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
 import { buildPromptPlan } from "./prompt";
 import { buildHandoffUrls, fetchGoogleCustomSearch, fetchNaverResults } from "./providers";
@@ -63,17 +64,15 @@ export async function searchSketch(
     candidateEntities.flatMap((candidate) => candidate.queryVariants),
   ).slice(0, 6);
   const promptPlan = buildPromptPlan(input, candidateEntities);
-
-  const naverResult = await naverSearch(promptPlan.searchPrompts, candidateEntities);
-  const googleFeatureResult = await googleSearch(promptPlan.searchPrompts[0] ?? "");
-
-  const mergedResults =
-    googleFeatureResult.length && naverResult.mode === "live"
-      ? [...naverResult.items, ...googleFeatureResult].slice(0, 8)
-      : naverResult.items.slice(0, 8);
-
-  const topQuery = promptPlan.searchPrompts[0] ?? queryVariants[0] ?? "스케치 이미지 검색";
-  const topCandidate = candidateEntities[0];
+  const agentResult = await runSearchAgent(input, candidateEntities, {
+    googleSearch,
+    naverSearch,
+  });
+  const finalCandidates = agentResult.candidateEntities.length
+    ? agentResult.candidateEntities
+    : candidateEntities;
+  const topQuery = agentResult.topQuery;
+  const topCandidate = finalCandidates[0];
   const sessionId = randomUUID();
   const imageAssistMode =
     visionCandidates.length > 0
@@ -82,12 +81,22 @@ export async function searchSketch(
         ? "sketch-structure"
         : "text-only";
 
+  if (agentResult.searchTrace.length) {
+    console.info(
+      "[drawtosearch-agent]",
+      JSON.stringify({
+        sessionId,
+        trace: agentResult.searchTrace,
+      }),
+    );
+  }
+
   await persistSession({
-    candidateEntities,
+    candidateEntities: finalCandidates,
     confidence: topCandidate?.confidence ?? 0,
     locale: input.locale,
-    providerMode: naverResult.mode,
-    queryVariants: promptPlan.searchPrompts,
+    providerMode: agentResult.providerMode,
+    queryVariants: agentResult.searchPrompts,
     sessionId,
     topEntity: topCandidate?.label ?? "이미지 후보",
     topQuery,
@@ -95,15 +104,15 @@ export async function searchSketch(
   });
 
   return {
-    candidateEntities,
+    candidateEntities: finalCandidates,
     handoffUrls: buildHandoffUrls(topQuery),
     imageAssistMode,
-    naverResults: mergedResults,
-    providerMode: naverResult.mode,
+    naverResults: agentResult.totalResults,
+    providerMode: agentResult.providerMode,
     queryVariants,
     regenerationPrompt: promptPlan.regenerationPrompt,
     reasoning: [...heuristic.reasoning, ...promptPlan.promptReasoning, ...visionReasoning],
-    searchPrompts: promptPlan.searchPrompts,
+    searchPrompts: agentResult.searchPrompts,
     sessionId,
   };
 }

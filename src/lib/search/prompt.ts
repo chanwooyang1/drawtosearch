@@ -8,6 +8,38 @@ type PromptPlan = {
   searchPrompts: string[];
 };
 
+function isBrowserIconContext(input: SearchInput, topCandidate?: EntityCandidate) {
+  const combined = `${input.userText} ${topCandidate?.label ?? ""} ${topCandidate?.query ?? ""}`.toLowerCase();
+  return [
+    "브라우저",
+    "browser",
+    "인터넷",
+    "web",
+    "chrome",
+    "크롬",
+    "edge",
+    "엣지",
+    "firefox",
+    "파이어폭스",
+    "safari",
+    "사파리",
+  ].some((token) => combined.includes(token));
+}
+
+function isIconContext(input: SearchInput, topCandidate?: EntityCandidate) {
+  const combined = `${input.userText} ${topCandidate?.label ?? ""} ${topCandidate?.query ?? ""}`.toLowerCase();
+  return [
+    "아이콘",
+    "icon",
+    "로고",
+    "logo",
+    "마크",
+    "mark",
+    "앱",
+    "app",
+  ].some((token) => combined.includes(token));
+}
+
 function compactPhrase(parts: Array<string | null | undefined>) {
   return parts
     .filter(Boolean)
@@ -38,8 +70,14 @@ export function buildPromptPlan(
   const detailTokens = extractDetailTokens(input, candidates);
   const detailPhrase = detailTokens.join(" ");
   const sketchPhrase = sketchDescriptors.join(" ");
+  const browserIconContext = isBrowserIconContext(input, topCandidate);
+  const iconContext = browserIconContext || isIconContext(input, topCandidate);
 
   const searchPrompts = dedupeStrings([
+    browserIconContext ? `${topCandidate?.label ?? ""} 브라우저 로고 아이콘` : "",
+    browserIconContext ? `${topCandidate?.label ?? ""} 앱 아이콘` : "",
+    browserIconContext ? `${topCandidate?.label ?? ""} logo icon` : "",
+    !browserIconContext && iconContext ? `${topCandidate?.label ?? ""} 로고 아이콘` : "",
     compactPhrase([
       topCandidate?.query,
       detailPhrase,

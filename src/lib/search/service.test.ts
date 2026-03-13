@@ -130,6 +130,47 @@ describe("searchSketch", () => {
     expect(result.regenerationPrompt).toContain("스케치 구조");
   });
 
+  it("identifies chrome-like browser icon hints early", async () => {
+    const result = await searchSketch(
+      {
+        hasDrawing: true,
+        locale: "ko-KR",
+        sketchDataUrl: "data:image/png;base64,ZmFrZQ==",
+        sketchSummary: {
+          aspectBucket: "square",
+          complexity: "medium",
+          dominantGeometry: "round",
+          elementCount: 4,
+          hasClosedShapes: true,
+          repeatedMarks: false,
+          typeCounts: {
+            arrow: 0,
+            diamond: 0,
+            ellipse: 3,
+            freedraw: 0,
+            line: 0,
+            rectangle: 1,
+            text: 0,
+          },
+        },
+        userText:
+          "인터넷 브라우저에서 봤고 흰색 파란색 초록색 노란색이 있는 동그란 마크 같아요",
+      },
+      {
+        googleSearch: vi.fn().mockResolvedValue([]),
+        naverSearch: vi.fn().mockResolvedValue({
+          items: [],
+          mode: "mock",
+        }),
+        persistSession: vi.fn().mockResolvedValue(undefined),
+      },
+    );
+
+    expect(result.candidateEntities[0]?.label).toBe("구글 크롬");
+    expect(result.searchPrompts[0]).toContain("구글 크롬");
+    expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
+  });
+
   it("refines prompts after reading first-pass search results", async () => {
     const naverSearch = vi
       .fn()

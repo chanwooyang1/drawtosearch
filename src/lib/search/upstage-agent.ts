@@ -28,6 +28,21 @@ import type {
   SearchInput,
 } from "./types";
 
+type ReasoningGateway = {
+  apiKey: string;
+  baseURL: string;
+  engine: SearchAgentResult["engine"];
+  model: string;
+};
+
+type ReasoningGatewayEnv = {
+  LITELLM_API_BASE?: string;
+  LITELLM_API_KEY?: string;
+  LITELLM_MODEL: string;
+  UPSTAGE_API_KEY?: string;
+  UPSTAGE_MODEL: string;
+};
+
 const DISALLOWED_QUERY_TERMS = [
   "손그림",
   "스케치",
@@ -237,18 +252,44 @@ function formatResults(results: SearchImageResult[]) {
     .join("\n");
 }
 
-function createUpstageReasoningAgent(): SearchReasoningAgent | null {
-  if (!env.UPSTAGE_API_KEY) {
+export function resolveReasoningGateway(
+  config: ReasoningGatewayEnv = env,
+): ReasoningGateway | null {
+  if (config.LITELLM_API_BASE) {
+    return {
+      apiKey: config.LITELLM_API_KEY ?? "anything",
+      baseURL: config.LITELLM_API_BASE,
+      engine: "langgraph-litellm",
+      model: config.LITELLM_MODEL,
+    };
+  }
+
+  if (!config.UPSTAGE_API_KEY) {
+    return null;
+  }
+
+  return {
+    apiKey: config.UPSTAGE_API_KEY,
+    baseURL: "https://api.upstage.ai/v1/solar",
+    engine: "langgraph-upstage",
+    model: config.UPSTAGE_MODEL,
+  };
+}
+
+function createReasoningAgent(): SearchReasoningAgent | null {
+  const gateway = resolveReasoningGateway();
+
+  if (!gateway) {
     return null;
   }
 
   const model = new ChatOpenAI({
-    apiKey: env.UPSTAGE_API_KEY,
+    apiKey: gateway.apiKey,
     configuration: {
-      baseURL: "https://api.upstage.ai/v1/solar",
+      baseURL: gateway.baseURL,
     },
     maxTokens: 900,
-    model: env.UPSTAGE_MODEL,
+    model: gateway.model,
     temperature: 0.1,
     timeout: 20_000,
   });
@@ -264,6 +305,7 @@ function createUpstageReasoningAgent(): SearchReasoningAgent | null {
   });
 
   return {
+    engine: gateway.engine,
     async assessResults(context: SearchAssessmentContext) {
       return assessor.invoke([
         new SystemMessage([
@@ -359,10 +401,11 @@ export async function runLangGraphSearchAgent(
   seedCandidates: EntityCandidate[],
   dependencies: SearchAgentDependencies,
 ): Promise<SearchAgentResult> {
-  const reasoningAgent = dependencies.reasoningAgent ?? createUpstageReasoningAgent();
+  const reasoningAgent = dependencies.reasoningAgent ?? createReasoningAgent();
+  const reasoningEngine = reasoningAgent?.engine ?? "langgraph-upstage";
 
   if (!reasoningAgent) {
-    throw new Error("UPSTAGE_API_KEY is not configured.");
+    throw new Error("No reasoning gateway is configured. Set LITELLM_API_BASE or UPSTAGE_API_KEY.");
   }
 
   const promptPlan = buildPromptPlan(input, seedCandidates);
@@ -576,7 +619,7 @@ export async function runLangGraphSearchAgent(
 
   return {
     candidateEntities: state.candidateEntities.length ? state.candidateEntities : seedCandidates,
-    engine: "langgraph-upstage",
+    engine: reasoningEngine,
     providerMode: state.providerMode,
     searchPrompts,
     searchTrace: state.searchTrace,

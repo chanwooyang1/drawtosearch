@@ -23,7 +23,7 @@ export type SearchAgentDependencies = {
 
 export type SearchAgentResult = {
   candidateEntities: EntityCandidate[];
-  engine: "langgraph-upstage" | "rule-based";
+  engine: "langgraph-litellm" | "langgraph-upstage" | "rule-based";
   providerMode: ProviderMode;
   searchPrompts: string[];
   searchTrace: SearchAgentTrace[];
@@ -94,6 +94,7 @@ export type SearchSelection = {
 };
 
 export type SearchReasoningAgent = {
+  engine?: SearchAgentResult["engine"];
   assessResults: (
     context: SearchAssessmentContext,
   ) => Promise<SearchAssessment>;

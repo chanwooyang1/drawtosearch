@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { runSearchAgent } from "./agent";
 import { buildQueryVariants } from "./query";
+import { resolveReasoningGateway } from "./upstage-agent";
 import type { SearchReasoningAgent } from "./agent";
 import type { EntityCandidate, SearchInput } from "./types";
 
@@ -111,6 +112,40 @@ function createReasoningAgent(): SearchReasoningAgent {
 }
 
 describe("runSearchAgent", () => {
+  it("prefers LiteLLM when a proxy base is configured", () => {
+    const gateway = resolveReasoningGateway({
+      LITELLM_API_BASE: "http://127.0.0.1:4000",
+      LITELLM_API_KEY: "proxy-secret",
+      LITELLM_MODEL: "drawtosearch-reasoner",
+      UPSTAGE_API_KEY: "upstage-direct",
+      UPSTAGE_MODEL: "solar-pro2",
+    });
+
+    expect(gateway).toEqual({
+      apiKey: "proxy-secret",
+      baseURL: "http://127.0.0.1:4000",
+      engine: "langgraph-litellm",
+      model: "drawtosearch-reasoner",
+    });
+  });
+
+  it("falls back to direct Upstage when LiteLLM is not configured", () => {
+    const gateway = resolveReasoningGateway({
+      LITELLM_API_BASE: undefined,
+      LITELLM_API_KEY: undefined,
+      LITELLM_MODEL: "drawtosearch-reasoner",
+      UPSTAGE_API_KEY: "upstage-direct",
+      UPSTAGE_MODEL: "solar-pro2",
+    });
+
+    expect(gateway).toEqual({
+      apiKey: "upstage-direct",
+      baseURL: "https://api.upstage.ai/v1/solar",
+      engine: "langgraph-upstage",
+      model: "solar-pro2",
+    });
+  });
+
   it("uses LangGraph reasoning to refine toward the real-world target", async () => {
     const naverSearch = vi
       .fn()

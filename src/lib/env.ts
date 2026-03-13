@@ -18,6 +18,9 @@ const envSchema = z.object({
     .string()
     .min(1)
     .default("Qwen/Qwen2.5-VL-3B-Instruct"),
+  LITELLM_API_BASE: optionalEnvString,
+  LITELLM_API_KEY: optionalEnvString,
+  LITELLM_MODEL: z.string().min(1).default("drawtosearch-reasoner"),
   NAVER_CLIENT_ID: optionalEnvString,
   NAVER_CLIENT_SECRET: optionalEnvString,
   UPSTAGE_API_KEY: optionalEnvString,
@@ -28,5 +31,6 @@ export const env = envSchema.parse({
   ...process.env,
   HUGGINGFACE_VISION_MODEL:
     process.env.HUGGINGFACE_VISION_MODEL ?? "Qwen/Qwen2.5-VL-3B-Instruct",
+  LITELLM_MODEL: process.env.LITELLM_MODEL ?? "drawtosearch-reasoner",
   UPSTAGE_MODEL: process.env.UPSTAGE_MODEL ?? "solar-pro2",
 });

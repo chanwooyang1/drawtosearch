@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useDeferredValue, useRef, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { LoaderCircle, Search, Sparkles, ExternalLink, BadgeInfo } from "lucide-react";
 
 import type { SearchResponse } from "@/lib/search/types";
@@ -29,6 +35,7 @@ async function postJson<T>(url: string, payload: unknown) {
 
 export function SearchExperience() {
   const canvasRef = useRef<SketchCanvasHandle>(null);
+  const resultSectionRef = useRef<HTMLElement | null>(null);
   const [userText, setUserText] = useState("");
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [feedbackState, setFeedbackState] = useState<FeedbackState>(null);
@@ -69,6 +76,17 @@ export function SearchExperience() {
     result?.candidateEntities.find((candidate) => candidate.id === activeCandidateId) ??
     result?.candidateEntities[0] ??
     null;
+
+  useEffect(() => {
+    if (!result) {
+      return;
+    }
+
+    resultSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [result]);
 
   const trackEvent = async (
     eventType: "candidate_click" | "result_click" | "handoff_click",
@@ -217,7 +235,10 @@ export function SearchExperience() {
       </section>
 
       {result ? (
-        <section className="paper-panel rounded-[28px] p-4">
+        <section
+          className="paper-panel rounded-[28px] p-4"
+          ref={resultSectionRef}
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="ink-title text-xl">3. 이게 맞는지 확인해보세요</h2>

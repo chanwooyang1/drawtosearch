@@ -12,126 +12,74 @@ type PatternSeed = {
   score: number;
 };
 
-const CURATED_PATTERNS: PatternSeed[] = [
+const GENERIC_CONTEXT_PATTERNS: PatternSeed[] = [
   {
     hints: [
-      "lv",
-      "엘브이",
-      "모노그램",
-      "갈색",
-      "명품",
-      "반복 무늬",
-      "브랜드 로고",
-      "꽃무늬",
-      "luxury logo",
+      "로고",
+      "logo",
+      "마크",
+      "mark",
+      "심볼",
+      "symbol",
+      "문양",
+      "엠블럼",
+      "badge",
     ],
-    label: "루이비통",
-    query: "루이비통 로고 모노그램",
-    rationale: "모노그램, 명품, 갈색 패턴 힌트가 루이비통 계열을 강하게 시사합니다.",
-    score: 0.82,
-  },
-  {
-    hints: ["두 개의 c", "더블 c", "샤넬", "black luxury"],
-    label: "샤넬",
-    query: "샤넬 로고",
-    rationale: "겹쳐진 문자 로고와 럭셔리 맥락이 샤넬 후보와 가깝습니다.",
-    score: 0.76,
-  },
-  {
-    hints: ["swoosh", "체크 표시", "나이키", "운동 브랜드"],
-    label: "나이키",
-    query: "나이키 로고",
-    rationale: "스우시 형태나 스포츠 브랜드 설명이 나이키와 잘 맞습니다.",
-    score: 0.79,
-  },
-  {
-    hints: ["세 줄", "아디다스", "삼선", "sports brand"],
-    label: "아디다스",
-    query: "아디다스 로고",
-    rationale: "삼선이나 세 잎 형태 설명이 아디다스 후보를 강화합니다.",
-    score: 0.75,
+    label: "실제 로고 또는 심볼",
+    query: "실제 로고 또는 심볼 reference",
+    rationale: "텍스트가 브랜드명보다 로고나 심볼 자체를 찾는 상황으로 보입니다.",
+    score: 0.68,
   },
   {
     hints: [
-      "크롬",
-      "chrome",
-      "구글 크롬",
-      "인터넷 브라우저",
+      "아이콘",
+      "icon",
+      "앱",
+      "app",
+      "서비스",
+      "service",
+      "프로그램",
+      "software",
       "웹 브라우저",
       "브라우저",
-      "파란색",
-      "초록색",
-      "노란색",
-      "빨간색",
-      "원형 아이콘",
-      "동그란 마크",
+      "인터넷",
+      "web",
     ],
-    label: "구글 크롬",
-    query: "구글 크롬 로고 아이콘",
-    rationale:
-      "브라우저 맥락과 파랑, 초록, 노랑 계열의 원형 아이콘 단서가 구글 크롬과 강하게 맞닿아 있습니다.",
-    score: 0.88,
+    label: "앱 아이콘 또는 서비스 심볼",
+    query: "앱 아이콘 또는 서비스 로고 reference",
+    rationale: "서비스나 앱 화면에서 본 표식일 가능성을 넓게 유지합니다.",
+    score: 0.66,
   },
   {
     hints: [
-      "엣지",
-      "edge",
-      "마이크로소프트 브라우저",
-      "브라우저",
-      "파란색",
-      "초록색",
-      "wave icon",
-      "소용돌이",
+      "브랜드",
+      "brand",
+      "제품",
+      "product",
+      "패키지",
+      "포장",
+      "상품",
+      "제품 사진",
     ],
-    label: "마이크로소프트 엣지",
-    query: "마이크로소프트 엣지 로고 아이콘",
-    rationale:
-      "파란색과 초록색이 섞인 브라우저 아이콘 설명이 마이크로소프트 엣지 계열 후보를 시사합니다.",
-    score: 0.77,
-  },
-  {
-    hints: [
-      "파이어폭스",
-      "firefox",
-      "브라우저",
-      "주황색",
-      "보라색",
-      "여우",
-      "원형 아이콘",
-    ],
-    label: "파이어폭스",
-    query: "파이어폭스 로고 아이콘",
-    rationale:
-      "원형 브라우저 아이콘 맥락과 주황, 보라 계열 설명이 파이어폭스 후보와 가깝습니다.",
-    score: 0.73,
-  },
-  {
-    hints: ["운동화", "스니커즈", "shoe", "sneaker"],
-    label: "스니커즈",
-    query: "운동화 제품 이미지",
-    rationale: "형태가 브랜드보다 제품군 인지에 가깝기 때문에 스니커즈 범주를 우선 제안합니다.",
-    score: 0.67,
-  },
-  {
-    hints: ["가방", "핸드백", "bag", "tote"],
-    label: "가방",
-    query: "가방 제품 이미지",
-    rationale: "실루엣이 액세서리 제품 탐색에 더 적합해 보입니다.",
-    score: 0.64,
-  },
-  {
-    hints: ["컵", "머그", "cup", "mug"],
-    label: "컵",
-    query: "컵 제품 이미지",
-    rationale: "손잡이나 원통형 실루엣 설명이 컵 범주와 맞닿아 있습니다.",
+    label: "제품 또는 브랜드 비주얼",
+    query: "제품 또는 브랜드 비주얼 reference",
+    rationale: "로고보다는 제품군이나 브랜드 비주얼일 가능성도 함께 둡니다.",
     score: 0.58,
   },
   {
-    hints: ["고양이", "cat", "귀", "수염"],
-    label: "고양이",
-    query: "고양이 사진",
-    rationale: "귀와 얼굴 윤곽 힌트가 동물 범주 중 고양이와 가깝습니다.",
-    score: 0.6,
+    hints: [
+      "사물",
+      "물건",
+      "object",
+      "device",
+      "도구",
+      "장비",
+      "실물",
+    ],
+    label: "일반 물체 또는 사물 이미지",
+    query: "일반 물체 reference image",
+    rationale: "브랜드가 아니라 일반 사물일 가능성도 열어둡니다.",
+    score: 0.52,
   },
 ];
 
@@ -146,21 +94,21 @@ function buildFreeformCandidate(userText: string) {
   const query = userText.trim();
 
   return {
-    confidence: 0.55,
+    confidence: 0.5,
     id: randomUUID(),
-    label,
+    label: label || "설명 기반 시각 후보",
     query,
     queryVariants: buildQueryVariants({ label, query, userText }),
     rationale:
-      "명시적으로 적어준 설명이 가장 강한 단서라서 텍스트 자체를 첫 검색어로 사용합니다.",
+      "사용자가 직접 적은 설명은 편향 없는 1차 증거라서 원문을 그대로 보존합니다.",
     source: "heuristic" as const,
   };
 }
 
-function buildPatternCandidates(userText: string) {
+function buildContextCandidates(userText: string) {
   const normalized = normalizeSearchText(userText);
 
-  return CURATED_PATTERNS.map((pattern) => {
+  return GENERIC_CONTEXT_PATTERNS.map((pattern) => {
     const overlap = Math.max(
       ...pattern.hints.map((hint) => scoreTokenOverlap(normalized, hint)),
       0,
@@ -312,7 +260,7 @@ function buildSketchCandidates(input: SearchInput) {
 export function interpretWithHeuristics(input: SearchInput): InterpretationResult {
   const candidates = dedupeByLabel([
     buildFreeformCandidate(input.userText),
-    ...buildPatternCandidates(input.userText),
+    ...buildContextCandidates(input.userText),
     ...buildSketchCandidates(input),
   ].filter(Boolean) as EntityCandidate[]);
 
@@ -334,7 +282,7 @@ export function interpretWithHeuristics(input: SearchInput): InterpretationResul
 
   const reasoning = dedupeStrings([
     input.userText.trim()
-      ? "사용자 설명 텍스트를 1차 신호로 사용했습니다."
+      ? "사용자 설명 텍스트를 편향 없는 1차 증거로 사용했습니다."
       : "",
     input.sketchSummary
       ? `스케치 구조 분석으로 ${buildSketchDescriptors(input.sketchSummary).join(", ")} 특징을 검색어에 반영했습니다.`
@@ -342,7 +290,7 @@ export function interpretWithHeuristics(input: SearchInput): InterpretationResul
         ? "스케치 존재 여부를 반영해 범용 실루엣 검색어를 추가했습니다."
         : "",
     nextCandidates[0]?.label
-      ? `가장 먼저 ${nextCandidates[0].label} 후보를 검토합니다.`
+      ? `가설은 ${nextCandidates[0].label}처럼 넓은 범주부터 시작합니다.`
       : "",
   ]);
 

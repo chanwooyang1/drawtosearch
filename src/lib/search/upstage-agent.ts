@@ -312,8 +312,12 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           "You are the internal retrieval critic for DrawToSearch.",
           "The user wants the real target behind a rough sketch, not the sketch itself.",
           "Decide if the first image search results are on-track.",
+          "Treat earlier candidates as temporary hypotheses, not facts.",
+          "Check whether colors, geometry, and where the user saw it match the observed results.",
+          "If the result colors or usage context drift away from the user evidence, reject the current hypothesis and refine.",
           "If not, rewrite the queries toward the real-world target such as official logo, icon, product photo, or object reference.",
           "Ignore seller noise, model numbers, and unrelated retail clutter unless they strongly identify the target.",
+          "Do not overfit to famous brands or apps from one generic clue like a color or the word browser.",
           "Do not use drawing, sketch, doodle, or illustration terms in search queries.",
           "Return concise Korean observations when possible.",
         ].join(" ")),
@@ -322,7 +326,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           `Sketch summary: ${summarizeSketch(context.input)}`,
           `Initial search intent: ${context.previousPlan.searchIntent}`,
           `Initial observations: ${context.previousPlan.observations.join(" | ") || "(none)"}`,
-          "Seed candidates:",
+          "Seed candidates (coarse hypotheses only, safe to reject):",
           formatSeedCandidates(context.seedCandidates),
           "Initial planned candidates:",
           context.previousPlan.candidateEntities
@@ -344,8 +348,11 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           "You are the internal search strategist for DrawToSearch.",
           "Infer the actual entity the user wants from text plus sketch structure hints.",
           "The goal is to search real-world references, never the hand-drawn image itself.",
-          "Favor exact entities like brand, browser, app, product line, or everyday object when clues are strong.",
-          "When the context sounds like a browser or app icon, prioritize official icon or logo queries.",
+          "Start from evidence, not from any fixed list of brands or apps.",
+          "Generate multiple competing hypotheses from scratch and keep them diverse when evidence is weak.",
+          "Only commit to an exact entity like a brand, app, product line, or object when the evidence really supports it.",
+          "A famous brand should not win from generic clues alone such as one color, one shape, or the place where it was seen.",
+          "Use color combinations, geometry, repeated marks, and viewing context as evidence.",
           "Search queries must be short, concrete, and good for image search.",
           "Do not use drawing, sketch, doodle, or illustration terms in the search queries.",
           "Return concise Korean observations when possible.",
@@ -357,7 +364,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           context.promptPlan.regenerationPrompt
             ? `Reference-style prompt: ${context.promptPlan.regenerationPrompt}`
             : "Reference-style prompt: (none)",
-          "Seed candidates:",
+          "Seed candidates (broad starting points only, not trusted answers):",
           formatSeedCandidates(context.seedCandidates),
         ].join("\n")),
       ]);
@@ -367,7 +374,10 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new SystemMessage([
           "You are the final selector for DrawToSearch.",
           "Pick the most likely real-world target based on the search evidence.",
+          "Earlier candidates are tentative and may be wrong.",
           "Favor concrete entities over generic categories when the evidence is strong.",
+          "If the evidence is still mixed, prefer an honest broader category over a confident but famous wrong answer.",
+          "Pay attention to color consistency and where the user said they saw the target.",
           "Choose a topQuery that is best for the next image search or external handoff.",
           "Do not use drawing, sketch, doodle, or illustration terms in topQuery.",
           "Return concise Korean observations when possible.",
@@ -437,7 +447,7 @@ export async function runLangGraphSearchAgent(
               searchPrompts: searchPrompts.slice(0, 3),
             },
             stage: "plan",
-            summary: "Upstage가 실제 대상을 찾기 위한 검색 계획과 초기 검색어를 구성했습니다.",
+            summary: "추론 에이전트가 실제 대상을 찾기 위한 검색 계획과 초기 검색어를 구성했습니다.",
           },
         ],
       };
@@ -504,8 +514,8 @@ export async function runLangGraphSearchAgent(
             },
             stage: "assess",
             summary: shouldRefine
-              ? "Upstage가 1차 결과를 검토한 뒤 검색어를 더 구체적으로 좁혔습니다."
-              : "Upstage가 1차 결과만으로도 충분히 방향이 맞는다고 판단했습니다.",
+              ? "추론 에이전트가 1차 결과를 검토한 뒤 검색어를 더 구체적으로 좁혔습니다."
+              : "추론 에이전트가 1차 결과만으로도 충분히 방향이 맞는다고 판단했습니다.",
           },
         ],
       };
@@ -586,7 +596,7 @@ export async function runLangGraphSearchAgent(
               topQuery,
             },
             stage: "select",
-            summary: "Upstage가 가장 유력한 대상을 고르고 결과를 최종 정렬했습니다.",
+            summary: "추론 에이전트가 가장 유력한 대상을 고르고 결과를 최종 정렬했습니다.",
           },
         ],
         topQuery,

@@ -1,16 +1,25 @@
 import { z } from "zod";
 
+const optionalEnvString = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}, z.string().min(1).optional());
+
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1).optional(),
-  GOOGLE_CUSTOM_SEARCH_API_KEY: z.string().min(1).optional(),
-  GOOGLE_CUSTOM_SEARCH_CX: z.string().min(1).optional(),
-  HUGGINGFACE_API_KEY: z.string().min(1).optional(),
+  DATABASE_URL: optionalEnvString,
+  GOOGLE_CUSTOM_SEARCH_API_KEY: optionalEnvString,
+  GOOGLE_CUSTOM_SEARCH_CX: optionalEnvString,
+  HUGGINGFACE_API_KEY: optionalEnvString,
   HUGGINGFACE_VISION_MODEL: z
     .string()
     .min(1)
     .default("Qwen/Qwen2.5-VL-3B-Instruct"),
-  NAVER_CLIENT_ID: z.string().min(1).optional(),
-  NAVER_CLIENT_SECRET: z.string().min(1).optional(),
+  NAVER_CLIENT_ID: optionalEnvString,
+  NAVER_CLIENT_SECRET: optionalEnvString,
 });
 
 export const env = envSchema.parse({

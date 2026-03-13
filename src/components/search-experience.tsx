@@ -332,7 +332,7 @@ export function SearchExperience() {
                       {imageResult.title}
                     </p>
                     <p className="text-xs text-[color:var(--ink-soft)]">
-                      {imageResult.query}
+                      탭해서 원본 이미지 보기
                     </p>
                   </div>
                 </a>

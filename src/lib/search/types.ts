@@ -1,10 +1,33 @@
-export type CandidateSource = "heuristic" | "vision" | "merged";
+export type CandidateSource = "heuristic" | "sketch" | "vision" | "merged";
 export type ProviderMode = "live" | "mock";
+export type ImageAssistMode = "text-only" | "sketch-structure" | "hybrid-vision";
+export type SketchAspectBucket = "wide" | "tall" | "square";
+export type SketchComplexity = "minimal" | "medium" | "dense";
+export type SketchGeometry = "round" | "angular" | "organic" | "mixed";
+export type SketchElementType =
+  | "arrow"
+  | "diamond"
+  | "ellipse"
+  | "freedraw"
+  | "line"
+  | "rectangle"
+  | "text";
+
+export type SketchSummary = {
+  aspectBucket: SketchAspectBucket;
+  complexity: SketchComplexity;
+  dominantGeometry: SketchGeometry;
+  elementCount: number;
+  hasClosedShapes: boolean;
+  repeatedMarks: boolean;
+  typeCounts: Record<SketchElementType, number>;
+};
 
 export type SearchInput = {
   hasDrawing: boolean;
   locale: string;
   sketchDataUrl: string | null;
+  sketchSummary: SketchSummary | null;
   userText: string;
 };
 
@@ -38,6 +61,7 @@ export type SearchHandoffUrls = {
 export type SearchResponse = {
   candidateEntities: EntityCandidate[];
   handoffUrls: SearchHandoffUrls;
+  imageAssistMode: ImageAssistMode;
   naverResults: SearchImageResult[];
   providerMode: ProviderMode;
   queryVariants: string[];

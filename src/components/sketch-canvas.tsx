@@ -10,6 +10,9 @@ import {
 } from "react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
+import { summarizeSketchElements } from "@/lib/search/sketch";
+import type { SketchSummary } from "@/lib/search/types";
+
 type ExcalidrawProps = ComponentProps<typeof import("@excalidraw/excalidraw").Excalidraw>;
 
 const Excalidraw = dynamic<ExcalidrawProps>(
@@ -36,7 +39,11 @@ async function blobToDataUrl(blob: Blob) {
 
 export type SketchCanvasHandle = {
   clear: () => void;
-  exportSketch: () => Promise<{ dataUrl: string | null; hasDrawing: boolean }>;
+  exportSketch: () => Promise<{
+    dataUrl: string | null;
+    hasDrawing: boolean;
+    summary: SketchSummary | null;
+  }>;
 };
 
 export const SketchCanvas = forwardRef<SketchCanvasHandle>(function SketchCanvas(
@@ -55,7 +62,7 @@ export const SketchCanvas = forwardRef<SketchCanvasHandle>(function SketchCanvas
       const api = apiRef.current;
 
       if (!api) {
-        return { dataUrl: null, hasDrawing: false };
+        return { dataUrl: null, hasDrawing: false, summary: null };
       }
 
       const elements = api.getSceneElements();
@@ -63,8 +70,10 @@ export const SketchCanvas = forwardRef<SketchCanvasHandle>(function SketchCanvas
       setHasDrawing(nextHasDrawing);
 
       if (!nextHasDrawing) {
-        return { dataUrl: null, hasDrawing: false };
+        return { dataUrl: null, hasDrawing: false, summary: null };
       }
+
+      const summary = summarizeSketchElements(elements);
 
       const { exportToBlob } = await import("@excalidraw/excalidraw");
       const blob = await exportToBlob({
@@ -91,6 +100,7 @@ export const SketchCanvas = forwardRef<SketchCanvasHandle>(function SketchCanvas
       return {
         dataUrl: await blobToDataUrl(blob),
         hasDrawing: true,
+        summary,
       };
     },
   }));

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { env } from "@/lib/env";
 
 import { buildQueryVariants } from "./query";
+import { buildSketchDescriptors } from "./sketch";
 import type { InterpretationResult, SearchInput } from "./types";
 
 type VisionModelResponse = {
@@ -30,6 +31,10 @@ export async function interpretWithVision(
     return null;
   }
 
+  const sketchSummaryText = input.sketchSummary
+    ? `Sketch structure: ${buildSketchDescriptors(input.sketchSummary).join(", ")}.`
+    : "Sketch structure: unavailable.";
+
   const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
     body: JSON.stringify({
       messages: [
@@ -40,7 +45,7 @@ export async function interpretWithVision(
         {
           content: [
             {
-              text: `User hint: ${input.userText || "No extra text."}`,
+              text: `User hint: ${input.userText || "No extra text."}\n${sketchSummaryText}`,
               type: "text",
             },
             {

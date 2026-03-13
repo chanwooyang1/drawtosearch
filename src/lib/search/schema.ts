@@ -1,5 +1,23 @@
 import { z } from "zod";
 
+const sketchSummarySchema = z.object({
+  aspectBucket: z.enum(["wide", "tall", "square"]),
+  complexity: z.enum(["minimal", "medium", "dense"]),
+  dominantGeometry: z.enum(["round", "angular", "organic", "mixed"]),
+  elementCount: z.number().int().nonnegative().max(500),
+  hasClosedShapes: z.boolean(),
+  repeatedMarks: z.boolean(),
+  typeCounts: z.object({
+    arrow: z.number().int().nonnegative().max(500),
+    diamond: z.number().int().nonnegative().max(500),
+    ellipse: z.number().int().nonnegative().max(500),
+    freedraw: z.number().int().nonnegative().max(500),
+    line: z.number().int().nonnegative().max(500),
+    rectangle: z.number().int().nonnegative().max(500),
+    text: z.number().int().nonnegative().max(500),
+  }),
+});
+
 export const searchInputSchema = z.object({
   hasDrawing: z.boolean().default(false),
   locale: z.string().trim().min(2).default("ko-KR"),
@@ -10,6 +28,7 @@ export const searchInputSchema = z.object({
     .nullable()
     .optional()
     .default(null),
+  sketchSummary: sketchSummarySchema.nullable().optional().default(null),
   userText: z.string().trim().max(280).default(""),
 });
 

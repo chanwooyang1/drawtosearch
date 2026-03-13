@@ -4,7 +4,7 @@ import { recordSearchSession } from "@/lib/db/events";
 
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
 import { buildHandoffUrls, fetchGoogleCustomSearch, fetchNaverResults } from "./providers";
-import { dedupeStrings, summarizeTopQuery } from "./query";
+import { dedupeStrings, normalizeSearchText, summarizeTopQuery } from "./query";
 import type { EntityCandidate, SearchInput, SearchResponse } from "./types";
 import { interpretWithVision } from "./vision";
 
@@ -35,16 +35,28 @@ export async function searchSketch(
     visionReasoning = ["무료 비전 추론이 응답하지 않아 텍스트 중심 탐색으로 fallback 했습니다."];
   }
 
-  const candidateEntities = mergeCandidates([
+  const allCandidates = [
     ...heuristic.candidates,
     ...visionCandidates,
-  ]).map((candidate) => ({
-    ...candidate,
-    source:
-      candidate.source === "vision" && heuristic.candidates.some((item) => item.label === candidate.label)
-        ? "merged"
-        : candidate.source,
-  }));
+  ];
+  const labelSources = new Map<string, Set<EntityCandidate["source"]>>();
+
+  for (const candidate of allCandidates) {
+    const key = normalizeSearchText(candidate.label || candidate.query);
+    const existingSources = labelSources.get(key) ?? new Set<EntityCandidate["source"]>();
+    existingSources.add(candidate.source);
+    labelSources.set(key, existingSources);
+  }
+
+  const candidateEntities = mergeCandidates(allCandidates).map((candidate) => {
+    const key = normalizeSearchText(candidate.label || candidate.query);
+    const matchingSources = labelSources.get(key);
+
+    return {
+      ...candidate,
+      source: matchingSources && matchingSources.size > 1 ? "merged" : candidate.source,
+    };
+  });
 
   const queryVariants = dedupeStrings(
     candidateEntities.flatMap((candidate) => candidate.queryVariants),
@@ -61,6 +73,12 @@ export async function searchSketch(
   const topQuery = summarizeTopQuery(candidateEntities, input.userText);
   const topCandidate = candidateEntities[0];
   const sessionId = randomUUID();
+  const imageAssistMode =
+    visionCandidates.length > 0
+      ? "hybrid-vision"
+      : input.hasDrawing
+        ? "sketch-structure"
+        : "text-only";
 
   await persistSession({
     candidateEntities,
@@ -77,6 +95,7 @@ export async function searchSketch(
   return {
     candidateEntities,
     handoffUrls: buildHandoffUrls(topQuery),
+    imageAssistMode,
     naverResults: mergedResults,
     providerMode: naverResult.mode,
     queryVariants,

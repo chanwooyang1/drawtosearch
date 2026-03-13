@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  startTransition,
-  useDeferredValue,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import { LoaderCircle, Search, Sparkles, ExternalLink, BadgeInfo } from "lucide-react";
+import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
+import { LoaderCircle, Search, Sparkles, ExternalLink } from "lucide-react";
 
 import type { SearchResponse } from "@/lib/search/types";
 
@@ -51,7 +45,6 @@ export function SearchExperience() {
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [feedbackState, setFeedbackState] = useState<FeedbackState>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
-  const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const deferredText = useDeferredValue(userText);
 
@@ -72,7 +65,6 @@ export function SearchExperience() {
       const nextResult = await postJson<SearchResponse>("/api/search", payload);
       startTransition(() => {
         setResult(nextResult);
-        setActiveCandidateId(nextResult.candidateEntities[0]?.id ?? null);
         setFeedbackState(null);
         setSearchState("success");
       });
@@ -84,10 +76,7 @@ export function SearchExperience() {
     }
   };
 
-  const activeCandidate =
-    result?.candidateEntities.find((candidate) => candidate.id === activeCandidateId) ??
-    result?.candidateEntities[0] ??
-    null;
+  const primaryCandidate = result?.candidateEntities[0] ?? null;
 
   useEffect(() => {
     if (!result) {
@@ -101,7 +90,7 @@ export function SearchExperience() {
   }, [result]);
 
   const trackEvent = async (
-    eventType: "candidate_click" | "result_click" | "handoff_click",
+    eventType: "result_click" | "handoff_click",
     target: string,
     targetRank?: number,
   ) => {
@@ -237,8 +226,8 @@ export function SearchExperience() {
           )}
         </button>
         <div className="mt-3 rounded-[20px] border border-dashed border-[color:var(--surface-border)] px-4 py-3 text-sm text-[color:var(--ink-soft)]">
-          손그림 구조는 항상 검색어에 반영하고, 비전 추론이 가능하면 픽셀 기반
-          후보도 함께 섞습니다.
+          손그림과 설명을 바탕으로 내부적으로 여러 번 검색어를 조정해 가장 가까운
+          결과를 다시 모읍니다.
         </div>
         {errorMessage ? (
           <p className="mt-3 rounded-[18px] bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -256,7 +245,7 @@ export function SearchExperience() {
             <div>
               <h2 className="ink-title text-xl">3. 이게 맞는지 확인해보세요</h2>
               <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
-                가장 가능성이 높은 정체와 검색어를 먼저 보여드립니다.
+                내부적으로 몇 차례 검색을 조정한 뒤 가장 가까운 결과부터 보여드립니다.
               </p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
@@ -269,54 +258,19 @@ export function SearchExperience() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {result.candidateEntities.map((candidate, index) => {
-              const isActive = candidate.id === activeCandidateId;
-              return (
-                <button
-                  key={candidate.id}
-                  className={`rounded-full border px-3 py-2 text-left text-sm transition ${
-                    isActive
-                      ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent-deep)]"
-                      : "border-[color:var(--surface-border)] bg-white/65 text-[color:var(--foreground)] hover:border-[color:var(--accent)]"
-                  }`}
-                  onClick={() => {
-                    setActiveCandidateId(candidate.id);
-                    void trackEvent("candidate_click", candidate.label, index + 1);
-                  }}
-                  type="button"
-                >
-                  <span className="font-medium">{candidate.label}</span>
-                  <span className="ml-2 text-xs opacity-70">
-                    {Math.round(candidate.confidence * 100)}%
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {activeCandidate ? (
+          {primaryCandidate ? (
             <div className="mt-4 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">
               <div className="flex items-start gap-3">
                 <Sparkles className="mt-0.5 size-4 text-[color:var(--accent)]" />
                 <div>
                   <h3 className="font-semibold text-[color:var(--foreground)]">
-                    추천 정체: {activeCandidate.label}
+                    가장 가까운 추정: {primaryCandidate.label}
                   </h3>
                   <p className="mt-1 text-sm leading-6 text-[color:var(--ink-soft)]">
-                    {activeCandidate.rationale}
+                    손그림, 설명, 검색 결과를 함께 읽어 지금 단계에서 가장 유력한
+                    대상을 우선 정리했습니다.
                   </p>
                 </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {activeCandidate.queryVariants.map((query) => (
-                  <span
-                    key={query}
-                    className="rounded-full border border-[color:var(--surface-border)] px-3 py-1 text-xs text-[color:var(--ink-soft)]"
-                  >
-                    {query}
-                  </span>
-                ))}
               </div>
             </div>
           ) : null}
@@ -345,71 +299,6 @@ export function SearchExperience() {
               아직 아니에요
             </button>
           </div>
-
-          <div className="mt-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
-              <BadgeInfo className="size-4" />
-              후보 검색어
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {result.queryVariants.map((query) => (
-                <span
-                  key={query}
-                  className="rounded-full bg-[color:var(--accent-soft)] px-3 py-1 text-xs font-medium text-[color:var(--accent-deep)]"
-                >
-                  {query}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
-              <BadgeInfo className="size-4" />
-              실제 검색 프롬프트
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {result.searchPrompts.map((query) => (
-                <span
-                  key={query}
-                  className="rounded-full border border-[color:var(--surface-border)] bg-white/80 px-3 py-1 text-xs font-medium text-[color:var(--foreground)]"
-                >
-                  {query}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {result.regenerationPrompt ? (
-            <div className="mt-5 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
-                <Sparkles className="size-4" />
-                재생성용 프롬프트
-              </div>
-              <p className="text-sm leading-6 text-[color:var(--foreground)]">
-                {result.regenerationPrompt}
-              </p>
-            </div>
-          ) : null}
-
-          {result.reasoning.length ? (
-            <div className="mt-5 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
-                <BadgeInfo className="size-4" />
-                검색에 반영한 힌트
-              </div>
-              <ul className="space-y-2 text-sm leading-6 text-[color:var(--ink-soft)]">
-                {result.reasoning.slice(0, 4).map((item) => (
-                  <li
-                    key={item}
-                    className="rounded-[18px] bg-[color:var(--surface-strong)] px-3 py-2"
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
 
           <div className="mt-5">
             <div className="mb-3 flex items-center justify-between">

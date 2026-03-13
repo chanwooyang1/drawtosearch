@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
 
 import { recordSearchSession } from "@/lib/db/events";
+import { createSearchPolicyEngine } from "@/lib/policy/engine";
+import { recordPolicyDecisions, dbPolicySnapshotStore } from "@/lib/policy/store";
+import type { SearchPolicyEngine } from "@/lib/policy/types";
 
 import { runSearchAgent, type SearchAgentDependencies } from "./agent";
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
@@ -13,6 +16,8 @@ import { interpretWithVision } from "./vision";
 type SearchDependencies = {
   googleSearch?: typeof fetchGoogleCustomSearch;
   naverSearch?: typeof fetchNaverResults;
+  policyEngine?: SearchPolicyEngine;
+  persistPolicyDecisions?: typeof recordPolicyDecisions;
   persistSession?: typeof recordSearchSession;
   reasoningAgent?: SearchAgentDependencies["reasoningAgent"];
   searchAgent?: typeof runSearchAgent;
@@ -25,10 +30,18 @@ export async function searchSketch(
 ): Promise<SearchResponse> {
   const googleSearch = dependencies.googleSearch ?? fetchGoogleCustomSearch;
   const naverSearch = dependencies.naverSearch ?? fetchNaverResults;
+  const policyEngine =
+    dependencies.policyEngine ??
+    createSearchPolicyEngine({
+      snapshotStore: dbPolicySnapshotStore,
+    });
+  const persistPolicyDecisions =
+    dependencies.persistPolicyDecisions ?? recordPolicyDecisions;
   const persistSession = dependencies.persistSession ?? recordSearchSession;
   const reasoningAgent = dependencies.reasoningAgent;
   const searchAgent = dependencies.searchAgent ?? runSearchAgent;
   const visionInterpreter = dependencies.visionInterpreter ?? interpretWithVision;
+  const sessionId = randomUUID();
   const heuristic = interpretWithHeuristics(input);
   let visionReasoning: string[] = [];
   let visionCandidates: EntityCandidate[] = [];
@@ -71,14 +84,16 @@ export async function searchSketch(
   const agentResult = await searchAgent(input, candidateEntities, {
     googleSearch,
     naverSearch,
+    policyEngine,
     reasoningAgent,
+    sessionId,
+    visionCandidates,
   });
   const finalCandidates = agentResult.candidateEntities.length
     ? agentResult.candidateEntities
     : candidateEntities;
   const topQuery = agentResult.topQuery;
   const topCandidate = finalCandidates[0];
-  const sessionId = randomUUID();
   const imageAssistMode =
     visionCandidates.length > 0
       ? "hybrid-vision"
@@ -108,6 +123,8 @@ export async function searchSketch(
     topQuery,
     userText: input.userText,
   });
+
+  await persistPolicyDecisions(agentResult.policyDecisions);
 
   return {
     candidateEntities: finalCandidates,

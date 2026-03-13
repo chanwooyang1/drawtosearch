@@ -1,4 +1,9 @@
 import type {
+  PolicyDecisionRecord,
+  SearchPolicyEngine,
+} from "@/lib/policy/types";
+
+import type {
   EntityCandidate,
   ProviderMode,
   SearchImageResult,
@@ -18,12 +23,16 @@ export type SearchAgentDependencies = {
     queries: string[],
     candidates: EntityCandidate[],
   ) => Promise<SearchProviderResult>;
+  policyEngine?: SearchPolicyEngine | null;
   reasoningAgent?: SearchReasoningAgent | null;
+  sessionId: string;
+  visionCandidates?: EntityCandidate[];
 };
 
 export type SearchAgentResult = {
   candidateEntities: EntityCandidate[];
   engine: "langgraph-litellm" | "langgraph-upstage" | "rule-based";
+  policyDecisions: PolicyDecisionRecord[];
   providerMode: ProviderMode;
   searchPrompts: string[];
   searchTrace: SearchAgentTrace[];
@@ -45,6 +54,7 @@ export type SearchPlanningContext = {
     searchPrompts: string[];
   };
   seedCandidates: EntityCandidate[];
+  strategyDirective: string;
 };
 
 export type SearchAssessmentContext = {
@@ -56,6 +66,7 @@ export type SearchAssessmentContext = {
     searchPrompts: string[];
   };
   seedCandidates: EntityCandidate[];
+  strategyDirective: string;
 };
 
 export type SearchSelectionContext = {

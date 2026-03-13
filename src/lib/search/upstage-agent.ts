@@ -6,6 +6,8 @@ import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 
 import { env } from "@/lib/env";
+import { buildPolicyBucket, createPolicyContext } from "@/lib/policy/context";
+import type { PolicyDecisionRecord, PolicyDecisionStage, SearchPolicyContext } from "@/lib/policy/types";
 
 import { buildPromptPlan } from "./prompt";
 import { buildQueryVariants, dedupeStrings, normalizeSearchText, scoreTokenOverlap } from "./query";
@@ -114,6 +116,8 @@ const AgentGraphState = Annotation.Root({
   refinedPrompts: replaceState<string[]>(() => []),
   searchPrompts: replaceState<string[]>(() => []),
   searchTrace: appendTraceState,
+  planPolicyDecision: replaceState<PolicyDecisionRecord | null>(() => null),
+  refinePolicyDecision: replaceState<PolicyDecisionRecord | null>(() => null),
   secondPassResults: replaceState<SearchImageResult[]>(() => []),
   seedCandidates: replaceState<EntityCandidate[]>(() => []),
   shouldRefine: replaceState<boolean>(() => false),
@@ -252,6 +256,77 @@ function formatResults(results: SearchImageResult[]) {
     .join("\n");
 }
 
+function buildNeutralDirective(stage: PolicyDecisionStage) {
+  if (stage === "plan") {
+    return "Keep the initial search strategy broad and evidence-first. Treat named entities as temporary hypotheses until search evidence confirms them.";
+  }
+
+  return "Refine only from observed evidence. Reject current hypotheses when colors, geometry, or viewing context do not match the search results.";
+}
+
+function materializePolicyDecision(input: {
+  context: SearchPolicyContext;
+  directiveText: string;
+  explorationScore: number;
+  policyVersion: string;
+  sessionId: string;
+  stage: PolicyDecisionStage;
+  actionName: PolicyDecisionRecord["actionName"];
+}) {
+  return {
+    actionName: input.actionName,
+    contextBucket: buildPolicyBucket(input.context),
+    contextFeatures: input.context,
+    createdAt: new Date(),
+    directiveText: input.directiveText,
+    explorationScore: input.explorationScore,
+    id: randomUUID(),
+    policyFamily: input.stage === "plan" ? "plan_policy" : "refine_policy",
+    policyVersion: input.policyVersion,
+    sessionId: input.sessionId,
+    stage: input.stage,
+  } satisfies PolicyDecisionRecord;
+}
+
+async function selectPolicyDecision(input: {
+  context: SearchPolicyContext;
+  dependencies: SearchAgentDependencies;
+  stage: PolicyDecisionStage;
+}) {
+  if (!input.dependencies.policyEngine) {
+    return materializePolicyDecision({
+      actionName: "neutral",
+      context: input.context,
+      directiveText: buildNeutralDirective(input.stage),
+      explorationScore: 0,
+      policyVersion: "neutral-v1",
+      sessionId: input.dependencies.sessionId,
+      stage: input.stage,
+    });
+  }
+
+  const selection =
+    input.stage === "plan"
+      ? await input.dependencies.policyEngine.selectPlanPolicy({
+          context: input.context,
+          sessionId: input.dependencies.sessionId,
+        })
+      : await input.dependencies.policyEngine.selectRefinePolicy({
+          context: input.context,
+          sessionId: input.dependencies.sessionId,
+        });
+
+  return materializePolicyDecision({
+    actionName: selection.actionName,
+    context: input.context,
+    directiveText: selection.directiveText,
+    explorationScore: selection.explorationScore,
+    policyVersion: selection.policyVersion,
+    sessionId: input.dependencies.sessionId,
+    stage: input.stage,
+  });
+}
+
 export function resolveReasoningGateway(
   config: ReasoningGatewayEnv = env,
 ): ReasoningGateway | null {
@@ -324,6 +399,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new HumanMessage([
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
+          `Refine strategy directive: ${context.strategyDirective}`,
           `Initial search intent: ${context.previousPlan.searchIntent}`,
           `Initial observations: ${context.previousPlan.observations.join(" | ") || "(none)"}`,
           "Seed candidates (coarse hypotheses only, safe to reject):",
@@ -360,6 +436,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new HumanMessage([
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
+          `Plan strategy directive: ${context.strategyDirective}`,
           `Fallback prompt plan: ${context.promptPlan.searchPrompts.join(" | ")}`,
           context.promptPlan.regenerationPrompt
             ? `Reference-style prompt: ${context.promptPlan.regenerationPrompt}`
@@ -421,11 +498,40 @@ export async function runLangGraphSearchAgent(
   const promptPlan = buildPromptPlan(input, seedCandidates);
 
   const graph = new StateGraph(AgentGraphState)
+    .addNode("selectPlanPolicy", async (state) => {
+      const context = createPolicyContext({
+        input: state.input,
+        visionCandidates: dependencies.visionCandidates,
+      });
+      const planPolicyDecision = await selectPolicyDecision({
+        context,
+        dependencies,
+        stage: "plan",
+      });
+
+      return {
+        planPolicyDecision,
+        searchTrace: [
+          {
+            detail: {
+              action: planPolicyDecision.actionName,
+              bucket: planPolicyDecision.contextBucket,
+              explorationScore: planPolicyDecision.explorationScore,
+              policyVersion: planPolicyDecision.policyVersion,
+            },
+            stage: "policy-plan",
+            summary: "컨텍스트 밴딧이 초반 탐색 전략을 선택했습니다.",
+          },
+        ],
+      };
+    })
     .addNode("plan", async (state) => {
       const plan = await reasoningAgent.planSearch({
         input: state.input,
         promptPlan: state.promptPlan,
         seedCandidates: state.seedCandidates,
+        strategyDirective:
+          state.planPolicyDecision?.directiveText ?? buildNeutralDirective("plan"),
       });
       const candidateEntities = materializeCandidates(
         plan.candidateEntities,
@@ -475,6 +581,35 @@ export async function runLangGraphSearchAgent(
         ],
       };
     })
+    .addNode("selectRefinePolicy", async (state) => {
+      const context = createPolicyContext({
+        input: state.input,
+        results: state.firstPassResults,
+        visionCandidates: dependencies.visionCandidates,
+      });
+      const refinePolicyDecision = await selectPolicyDecision({
+        context,
+        dependencies,
+        stage: "refine",
+      });
+
+      return {
+        refinePolicyDecision,
+        searchTrace: [
+          {
+            detail: {
+              action: refinePolicyDecision.actionName,
+              bucket: refinePolicyDecision.contextBucket,
+              explorationScore: refinePolicyDecision.explorationScore,
+              policyVersion: refinePolicyDecision.policyVersion,
+              resultCoherence: context.resultCoherence,
+            },
+            stage: "policy-refine",
+            summary: "컨텍스트 밴딧이 1차 결과를 바탕으로 재탐색 전략을 선택했습니다.",
+          },
+        ],
+      };
+    })
     .addNode("assess", async (state) => {
       const assessment = await reasoningAgent.assessResults({
         firstPassResults: state.firstPassResults,
@@ -487,6 +622,8 @@ export async function runLangGraphSearchAgent(
         },
         promptPlan: state.promptPlan,
         seedCandidates: state.candidateEntities.length ? state.candidateEntities : state.seedCandidates,
+        strategyDirective:
+          state.refinePolicyDecision?.directiveText ?? buildNeutralDirective("refine"),
       });
       const candidateEntities = materializeCandidates(
         assessment.candidateEntities,
@@ -603,9 +740,11 @@ export async function runLangGraphSearchAgent(
         totalResults,
       };
     })
-    .addEdge(START, "plan")
+    .addEdge(START, "selectPlanPolicy")
+    .addEdge("selectPlanPolicy", "plan")
     .addEdge("plan", "searchPrimary")
-    .addEdge("searchPrimary", "assess")
+    .addEdge("searchPrimary", "selectRefinePolicy")
+    .addEdge("selectRefinePolicy", "assess")
     .addConditionalEdges("assess", (state) => (state.shouldRefine ? "searchRefined" : "select"))
     .addEdge("searchRefined", "select")
     .addEdge("select", END);
@@ -626,10 +765,15 @@ export async function runLangGraphSearchAgent(
     searchPrompts[0] ||
     promptPlan.searchPrompts[0] ||
     "스케치 이미지 검색";
+  const policyDecisions = [
+    state.planPolicyDecision,
+    state.refinePolicyDecision,
+  ].filter((decision): decision is PolicyDecisionRecord => Boolean(decision));
 
   return {
     candidateEntities: state.candidateEntities.length ? state.candidateEntities : seedCandidates,
     engine: reasoningEngine,
+    policyDecisions,
     providerMode: state.providerMode,
     searchPrompts,
     searchTrace: state.searchTrace,

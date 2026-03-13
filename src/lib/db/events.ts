@@ -1,5 +1,7 @@
 import { randomUUID } from "crypto";
 
+import { finalizePolicyRewardForSession } from "@/lib/policy/reward";
+
 import { getDb } from "./client";
 import { resultEvents, searchCandidates, searchSessions } from "./schema";
 
@@ -84,6 +86,7 @@ export async function recordResultEvent(payload: {
       target: payload.target,
       targetRank: payload.targetRank,
     });
+    await finalizePolicyRewardForSession(payload.sessionId);
   } catch (error) {
     console.error("Failed to persist search event", error);
   }

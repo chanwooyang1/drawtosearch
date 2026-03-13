@@ -309,6 +309,7 @@ export async function runRuleBasedSearchAgent(
   return {
     candidateEntities: finalCandidates,
     engine: "rule-based",
+    policyDecisions: [],
     providerMode,
     searchPrompts: finalPrompts,
     searchTrace: trace,

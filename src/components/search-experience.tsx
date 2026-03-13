@@ -349,7 +349,7 @@ export function SearchExperience() {
           <div className="mt-5">
             <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
               <BadgeInfo className="size-4" />
-              생성된 검색어
+              후보 검색어
             </div>
             <div className="flex flex-wrap gap-2">
               {result.queryVariants.map((query) => (
@@ -362,6 +362,35 @@ export function SearchExperience() {
               ))}
             </div>
           </div>
+
+          <div className="mt-5">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
+              <BadgeInfo className="size-4" />
+              실제 검색 프롬프트
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {result.searchPrompts.map((query) => (
+                <span
+                  key={query}
+                  className="rounded-full border border-[color:var(--surface-border)] bg-white/80 px-3 py-1 text-xs font-medium text-[color:var(--foreground)]"
+                >
+                  {query}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {result.regenerationPrompt ? (
+            <div className="mt-5 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[color:var(--ink-soft)]">
+                <Sparkles className="size-4" />
+                재생성용 프롬프트
+              </div>
+              <p className="text-sm leading-6 text-[color:var(--foreground)]">
+                {result.regenerationPrompt}
+              </p>
+            </div>
+          ) : null}
 
           {result.reasoning.length ? (
             <div className="mt-5 rounded-[24px] border border-[color:var(--surface-border)] bg-white/70 p-4">

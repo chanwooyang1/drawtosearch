@@ -171,6 +171,102 @@ describe("searchSketch", () => {
     expect(result.naverResults.some((entry) => entry.source === "mock")).toBeTruthy();
     expect(result.naverResults[0]?.title).toMatch(/TeamViewer/i);
     expect(result.candidateEntities[0]?.label).toMatch(/TeamViewer/i);
+    expect(result.referenceResults).toEqual([]);
+  });
+
+  it("shows a local reference image when an internal candidate is not visible in web results", async () => {
+    const searchAgent = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.74,
+          id: "candidate-1",
+          label: "서비스 아이콘 또는 원격 지원 로고",
+          query: "파란색 흰색 원형 서비스 아이콘",
+          queryVariants: ["원격 지원 로고", "파란색 흰색 원형 서비스 아이콘"],
+          rationale: "broad service hypothesis",
+          source: "heuristic",
+        },
+      ],
+      engine: "rule-based",
+      policyDecisions: [],
+      providerMode: "live",
+      searchPrompts: ["파란색 흰색 원형 서비스 아이콘"],
+      searchTrace: [],
+      topQuery: "파란색 흰색 원형 서비스 아이콘",
+      totalResults: [
+        {
+          dominantColors: ["blue", "white"],
+          id: "web-1",
+          link: "https://example.com/blue-service-icons",
+          query: "파란색 흰색 원형 서비스 아이콘",
+          shapeTags: ["round"],
+          source: "mock",
+          tags: ["service", "icon", "collection"],
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "Blue service icon roundup",
+        },
+      ],
+    });
+
+    const result = await searchSketch(
+      {
+        hasDrawing: true,
+        locale: "ko-KR",
+        sketchDataUrl: "data:image/png;base64,ZmFrZQ==",
+        sketchSummary: {
+          aspectBucket: "square",
+          complexity: "minimal",
+          dominantGeometry: "round",
+          elementCount: 2,
+          hasClosedShapes: true,
+          repeatedMarks: false,
+          typeCounts: {
+            arrow: 2,
+            diamond: 0,
+            ellipse: 1,
+            freedraw: 0,
+            line: 0,
+            rectangle: 0,
+            text: 0,
+          },
+        },
+        userText: "파란색과 흰색이 보이는 원형 원격 제어 프로그램 로고 같아요",
+      },
+      {
+        persistSession: vi.fn().mockResolvedValue(undefined),
+        referenceSearch: vi.fn().mockResolvedValue([
+          {
+            baseScore: 0.91,
+            category: "logo_icon",
+            dominantColors: ["blue", "white"],
+            id: "teamviewer-local",
+            imageSimilarity: 0.93,
+            link: "https://www.teamviewer.com/",
+            ocrTokens: ["TEAMVIEWER"],
+            query: "teamviewer remote support logo",
+            shapeTags: ["round", "arrows"],
+            source: "local",
+            sourceId: "teamviewer-logo",
+            sourceUrl: "https://www.teamviewer.com/",
+            tags: ["service", "remote support", "logo"],
+            textSimilarity: 0.9,
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "TeamViewer remote support logo",
+          },
+        ]),
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    expect(result.naverResults[0]?.title).toBe("Blue service icon roundup");
+    expect(result.candidateEntities[0]?.label).toMatch(/TeamViewer/i);
+    expect(result.referenceResults).toHaveLength(1);
+    expect(result.referenceResults[0]?.title).toMatch(/TeamViewer/i);
+    expect(result.referenceResults[0]?.source).toBe("local");
   });
 
   it("persists policy decisions with the same generated session id", async () => {

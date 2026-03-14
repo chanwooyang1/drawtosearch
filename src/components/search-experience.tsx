@@ -43,7 +43,9 @@ function getImageAssistLabel(mode: SearchResponse["imageAssistMode"]) {
 }
 
 function getProviderLabel(result: SearchResponse) {
-  const hasLocalResults = result.naverResults.some((item) => item.source === "local");
+  const hasLocalResults =
+    result.naverResults.some((item) => item.source === "local") ||
+    result.referenceResults.some((item) => item.source === "local");
 
   if (result.providerMode === "live") {
     return hasLocalResults ? "Hybrid live" : "NAVER live";
@@ -433,11 +435,9 @@ export function SearchExperience() {
             <div className="mb-3 flex items-center justify-between">
               <h3 className="ink-title text-lg">인앱 이미지 결과</h3>
               <div className="text-xs text-[color:var(--ink-soft)]">
-                {result.naverResults.some((imageResult) => imageResult.source === "local")
-                  ? "로컬 reference와 웹 검색 결과를 함께 다시 정렬했습니다."
-                  : result.providerMode === "live"
-                    ? "NAVER 검색 결과"
-                    : "API 키가 없어서 데모 카드가 표시됩니다."}
+                {result.providerMode === "live"
+                  ? "웹 검색 결과"
+                  : "API 키가 없어서 데모 카드가 표시됩니다."}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -480,6 +480,60 @@ export function SearchExperience() {
               ))}
             </div>
           </div>
+
+          {result.referenceResults.length ? (
+            <div className="mt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="ink-title text-lg">내부 근접 레퍼런스</h3>
+                <div className="text-xs text-[color:var(--ink-soft)]">
+                  내부 후보로 실제 참고한 레퍼런스입니다.
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {result.referenceResults.map((imageResult, index) => (
+                  <a
+                    key={imageResult.id}
+                    className="group overflow-hidden rounded-[24px] border border-[color:var(--surface-border)] bg-white/75 transition hover:-translate-y-0.5 hover:border-[color:var(--accent)]"
+                    href={imageResult.link}
+                    onClick={() =>
+                      void trackEvent(
+                        "result_click",
+                        imageResult.link,
+                        result.naverResults.length + index + 1,
+                      )
+                    }
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt={imageResult.title}
+                      className="aspect-square w-full object-cover"
+                      src={imageResult.thumbnailUrl}
+                    />
+                    <div className="space-y-1 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-[color:var(--accent-soft)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--accent-deep)]">
+                          {getResultSourceLabel(imageResult.source)}
+                        </span>
+                        {imageResult.rerankFeatures?.totalScore ? (
+                          <span className="text-[10px] text-[color:var(--ink-soft)]">
+                            score {(imageResult.rerankFeatures.totalScore * 100).toFixed(0)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="line-clamp-2 text-sm font-medium text-[color:var(--foreground)]">
+                        {imageResult.title}
+                      </p>
+                      <p className="text-xs text-[color:var(--ink-soft)]">
+                        탭해서 참고 출처 보기
+                      </p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             {[

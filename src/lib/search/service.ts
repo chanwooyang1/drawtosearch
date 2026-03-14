@@ -18,8 +18,14 @@ import { runSearchAgent, type SearchAgentDependencies } from "./agent";
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
 import { buildPromptPlan } from "./prompt";
 import { buildHandoffUrls, fetchGoogleCustomSearch, fetchNaverResults } from "./providers";
-import { dedupeStrings, normalizeSearchText } from "./query";
-import type { EntityCandidate, SearchInput, SearchResponse } from "./types";
+import { dedupeStrings, normalizeSearchText, scoreTokenOverlap } from "./query";
+import type {
+  EntityCandidate,
+  RetrievalCandidate,
+  SearchImageResult,
+  SearchInput,
+  SearchResponse,
+} from "./types";
 import { interpretWithVision } from "./vision";
 
 type SearchDependencies = {
@@ -93,6 +99,121 @@ function buildDisplayResults(input: {
   }
 
   return [];
+}
+
+function isSameVisibleResult(
+  candidate: SearchImageResult,
+  visibleResults: SearchImageResult[],
+) {
+  const normalizedTitle = normalizeSearchText(candidate.title);
+  const candidateSearchText = [candidate.title, candidate.query, ...(candidate.tags ?? [])]
+    .filter(Boolean)
+    .join(" ");
+
+  return visibleResults.some((visibleResult) => {
+    const normalizedVisibleTitle = normalizeSearchText(visibleResult.title);
+    const visibleSearchText = [
+      visibleResult.title,
+      visibleResult.query,
+      ...(visibleResult.tags ?? []),
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      visibleResult.id === candidate.id ||
+      visibleResult.link === candidate.link ||
+      (!!candidate.sourceId && candidate.sourceId === visibleResult.sourceId) ||
+      (!!normalizedTitle && normalizedTitle === normalizedVisibleTitle) ||
+      scoreTokenOverlap(candidateSearchText, visibleSearchText) >= 0.5 ||
+      scoreTokenOverlap(visibleSearchText, candidateSearchText) >= 0.5
+    );
+  });
+}
+
+function scoreReferenceMatch(
+  candidate: EntityCandidate,
+  referenceResult: SearchImageResult,
+) {
+  const searchableReference = [
+    referenceResult.title,
+    referenceResult.query,
+    ...(referenceResult.tags ?? []),
+    ...(referenceResult.ocrTokens ?? []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const normalizedReference = normalizeSearchText(searchableReference);
+
+  return [candidate.label, candidate.query, ...candidate.queryVariants].reduce(
+    (bestScore, term) => {
+      const normalizedTerm = normalizeSearchText(term);
+
+      if (!normalizedTerm) {
+        return bestScore;
+      }
+
+      return Math.max(
+        bestScore,
+        scoreTokenOverlap(term, searchableReference),
+        scoreTokenOverlap(searchableReference, term),
+        normalizedReference.includes(normalizedTerm) ? 1 : 0,
+        normalizedTerm.includes(normalizeSearchText(referenceResult.title)) ? 0.7 : 0,
+      );
+    },
+    0,
+  );
+}
+
+function buildReferenceResults(input: {
+  candidateEntities: EntityCandidate[];
+  evidence: ReturnType<typeof buildEvidenceBundle>;
+  localResults: RetrievalCandidate[];
+  topHypotheses: ReturnType<typeof buildHypotheses>;
+  visibleResults: SearchImageResult[];
+}) {
+  if (!input.localResults.length) {
+    return [];
+  }
+
+  const rerankedLocalResults = rerankResults({
+    candidateEntities: input.candidateEntities,
+    evidence: input.evidence,
+    localResults: input.localResults,
+    topHypotheses: input.topHypotheses,
+    webResults: [],
+  }).results;
+  const usedResultIds = new Set<string>();
+
+  return input.candidateEntities
+    .slice(0, 3)
+    .map((candidate) => {
+      const bestMatch = rerankedLocalResults
+        .filter(
+          (result) =>
+            !usedResultIds.has(result.id) &&
+            !isSameVisibleResult(result, input.visibleResults),
+        )
+        .map((result) => ({
+          result,
+          score: scoreReferenceMatch(candidate, result),
+        }))
+        .sort(
+          (left, right) =>
+            right.score - left.score ||
+            (right.result.rerankFeatures?.totalScore ?? 0) -
+              (left.result.rerankFeatures?.totalScore ?? 0),
+        )[0];
+
+      if (!bestMatch || bestMatch.score < 0.28) {
+        return null;
+      }
+
+      usedResultIds.add(bestMatch.result.id);
+      return bestMatch.result;
+    })
+    .filter((result): result is NonNullable<typeof result> => Boolean(result))
+    .slice(0, 2);
 }
 
 export async function searchSketch(
@@ -318,6 +439,13 @@ export async function searchSketch(
     topHypotheses: activeHypotheses,
     webResults: activeAgentResult.totalResults.filter((result) => result.source !== "local"),
   });
+  const referenceResults = buildReferenceResults({
+    candidateEntities: finalCandidates,
+    evidence,
+    localResults: activeLocalResults,
+    topHypotheses: activeHypotheses,
+    visibleResults: displayResults.length ? displayResults : reranked.results,
+  });
 
   return {
     candidateEntities: finalCandidates,
@@ -327,6 +455,7 @@ export async function searchSketch(
     providerMode: activeAgentResult.providerMode,
     queryVariants,
     clarification,
+    referenceResults,
     regenerationPrompt: promptPlan.regenerationPrompt,
     resultMode,
     reasoning,

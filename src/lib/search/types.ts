@@ -142,6 +142,7 @@ export type SearchResponse = {
   providerMode: ProviderMode;
   queryVariants: string[];
   clarification: ClarificationPrompt | null;
+  referenceResults: SearchImageResult[];
   regenerationPrompt: string | null;
   resultMode: ResultMode;
   reasoning: string[];

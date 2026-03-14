@@ -131,6 +131,9 @@ export function buildPromptPlan(
     !anchoredCandidate
       ? "특정 브랜드를 미리 가정하지 않고 입력 증거만으로 첫 검색 프롬프트를 만들었습니다."
       : "",
+    input.retryContext?.rejectedEntities?.length
+      ? `이전 실패 시도에서 ${input.retryContext.rejectedEntities.join(", ")} 후보를 제외해야 한다는 피드백을 반영했습니다.`
+      : "",
   ]);
 
   return {

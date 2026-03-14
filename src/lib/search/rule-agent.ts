@@ -54,6 +54,43 @@ const RESULT_TOKEN_STOPWORDS = new Set([
   "예요",
 ]);
 
+function isRejectedCandidate(candidate: EntityCandidate, rejectedEntities: string[]) {
+  if (!rejectedEntities.length) {
+    return false;
+  }
+
+  const candidateTerms = [
+    candidate.label,
+    candidate.query,
+    ...candidate.queryVariants,
+  ]
+    .map((value) => normalizeSearchText(value))
+    .filter(Boolean);
+
+  return rejectedEntities.some((rejectedEntity) => {
+    const normalizedRejected = normalizeSearchText(rejectedEntity);
+
+    return candidateTerms.some(
+      (term) =>
+        term === normalizedRejected ||
+        term.includes(normalizedRejected) ||
+        normalizedRejected.includes(term),
+    );
+  });
+}
+
+function excludeRejectedCandidates(candidates: EntityCandidate[], rejectedEntities: string[]) {
+  if (!rejectedEntities.length) {
+    return candidates;
+  }
+
+  const filtered = candidates.filter(
+    (candidate) => !isRejectedCandidate(candidate, rejectedEntities),
+  );
+
+  return filtered.length ? filtered : candidates;
+}
+
 function scoreCandidateWithResults(
   candidate: EntityCandidate,
   results: SearchImageResult[],
@@ -219,23 +256,35 @@ export async function runRuleBasedSearchAgent(
   dependencies: SearchAgentDependencies,
 ): Promise<SearchAgentResult> {
   const trace: SearchAgentTrace[] = [];
-  const firstPromptPlan = buildPromptPlan(input, seedCandidates);
+  const rejectedEntities = input.retryContext?.rejectedEntities ?? [];
+  const filteredSeedCandidates = excludeRejectedCandidates(seedCandidates, rejectedEntities);
+  const firstPromptPlan = buildPromptPlan(input, filteredSeedCandidates);
+
+  if (rejectedEntities.length) {
+    trace.push({
+      detail: {
+        rejectedEntities,
+      },
+      stage: "feedback",
+      summary: "이전 실패 시도에서 제외된 후보를 빼고 다시 탐색합니다.",
+    });
+  }
 
   trace.push({
     detail: {
       prompts: firstPromptPlan.searchPrompts.slice(0, 3),
-      seedCandidates: seedCandidates.slice(0, 3).map((candidate) => candidate.label),
+      seedCandidates: filteredSeedCandidates.slice(0, 3).map((candidate) => candidate.label),
     },
     stage: "seed",
     summary: "초기 후보와 텍스트 검색 프롬프트를 구성했습니다.",
   });
 
-  const firstPass = await dependencies.naverSearch(firstPromptPlan.searchPrompts, seedCandidates);
+  const firstPass = await dependencies.naverSearch(firstPromptPlan.searchPrompts, filteredSeedCandidates);
   const firstPassResults = firstPass.items.slice(0, 8);
-  const evidenceTokens = extractResultEvidenceTokens(input, firstPassResults, seedCandidates);
+  const evidenceTokens = extractResultEvidenceTokens(input, firstPassResults, filteredSeedCandidates);
   const resultAwareCandidates = deriveResultCandidates(
     input,
-    seedCandidates,
+    filteredSeedCandidates,
     firstPassResults,
     evidenceTokens,
   );
@@ -284,7 +333,7 @@ export async function runRuleBasedSearchAgent(
   );
   const finalCandidates = deriveResultCandidates(
     input,
-    resultAwareCandidates,
+    excludeRejectedCandidates(resultAwareCandidates, rejectedEntities),
     [...firstPassResults, ...secondPassResults, ...googleResults],
     evidenceTokens,
   );

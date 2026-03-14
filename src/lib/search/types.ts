@@ -23,9 +23,15 @@ export type SketchSummary = {
   typeCounts: Record<SketchElementType, number>;
 };
 
+export type SearchRetryContext = {
+  previousSessionId: string | null;
+  rejectedEntities: string[];
+};
+
 export type SearchInput = {
   hasDrawing: boolean;
   locale: string;
+  retryContext?: SearchRetryContext | null;
   sketchDataUrl: string | null;
   sketchSummary: SketchSummary | null;
   userText: string;

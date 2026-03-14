@@ -24,6 +24,46 @@ type SearchDependencies = {
   visionInterpreter?: typeof interpretWithVision;
 };
 
+function matchesRejectedEntity(candidate: EntityCandidate, rejectedEntities: string[]) {
+  if (!rejectedEntities.length) {
+    return false;
+  }
+
+  const candidateTerms = [
+    candidate.label,
+    candidate.query,
+    ...candidate.queryVariants,
+  ]
+    .map((value) => normalizeSearchText(value))
+    .filter(Boolean);
+
+  return rejectedEntities.some((rejectedEntity) => {
+    const normalizedRejected = normalizeSearchText(rejectedEntity);
+
+    return candidateTerms.some(
+      (term) =>
+        term === normalizedRejected ||
+        term.includes(normalizedRejected) ||
+        normalizedRejected.includes(term),
+    );
+  });
+}
+
+function excludeRejectedCandidates(
+  candidates: EntityCandidate[],
+  rejectedEntities: string[],
+) {
+  if (!rejectedEntities.length) {
+    return candidates;
+  }
+
+  const filtered = candidates.filter(
+    (candidate) => !matchesRejectedEntity(candidate, rejectedEntities),
+  );
+
+  return filtered.length ? filtered : candidates;
+}
+
 export async function searchSketch(
   input: SearchInput,
   dependencies: SearchDependencies = {},
@@ -42,6 +82,7 @@ export async function searchSketch(
   const searchAgent = dependencies.searchAgent ?? runSearchAgent;
   const visionInterpreter = dependencies.visionInterpreter ?? interpretWithVision;
   const sessionId = randomUUID();
+  const rejectedEntities = input.retryContext?.rejectedEntities ?? [];
   const heuristic = interpretWithHeuristics(input);
   let visionReasoning: string[] = [];
   let visionCandidates: EntityCandidate[] = [];
@@ -67,15 +108,18 @@ export async function searchSketch(
     labelSources.set(key, existingSources);
   }
 
-  const candidateEntities = mergeCandidates(allCandidates).map((candidate) => {
-    const key = normalizeSearchText(candidate.label || candidate.query);
-    const matchingSources = labelSources.get(key);
+  const candidateEntities = excludeRejectedCandidates(
+    mergeCandidates(allCandidates).map((candidate) => {
+      const key = normalizeSearchText(candidate.label || candidate.query);
+      const matchingSources = labelSources.get(key);
 
-    return {
-      ...candidate,
-      source: matchingSources && matchingSources.size > 1 ? "merged" : candidate.source,
-    };
-  });
+      return {
+        ...candidate,
+        source: matchingSources && matchingSources.size > 1 ? "merged" : candidate.source,
+      };
+    }),
+    rejectedEntities,
+  );
 
   const queryVariants = dedupeStrings(
     candidateEntities.flatMap((candidate) => candidate.queryVariants),
@@ -89,9 +133,12 @@ export async function searchSketch(
     sessionId,
     visionCandidates,
   });
-  const finalCandidates = agentResult.candidateEntities.length
-    ? agentResult.candidateEntities
-    : candidateEntities;
+  const finalCandidates = excludeRejectedCandidates(
+    agentResult.candidateEntities.length
+      ? agentResult.candidateEntities
+      : candidateEntities,
+    rejectedEntities,
+  );
   const topQuery = agentResult.topQuery;
   const topCandidate = finalCandidates[0];
   const imageAssistMode =

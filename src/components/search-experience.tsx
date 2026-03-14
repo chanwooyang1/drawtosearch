@@ -3,7 +3,7 @@
 import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 import { LoaderCircle, Search, Sparkles, ExternalLink } from "lucide-react";
 
-import type { SearchResponse } from "@/lib/search/types";
+import type { SearchResponse, SearchRetryContext } from "@/lib/search/types";
 
 import { SketchCanvas, type SketchCanvasHandle } from "./sketch-canvas";
 
@@ -45,6 +45,7 @@ export function SearchExperience() {
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [feedbackState, setFeedbackState] = useState<FeedbackState>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
+  const [retryContext, setRetryContext] = useState<SearchRetryContext | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const deferredText = useDeferredValue(userText);
 
@@ -56,6 +57,7 @@ export function SearchExperience() {
       const sketch = await canvasRef.current?.exportSketch();
       const payload = {
         locale: "ko-KR",
+        retryContext,
         sketchDataUrl: sketch?.dataUrl ?? null,
         hasDrawing: sketch?.hasDrawing ?? false,
         sketchSummary: sketch?.summary ?? null,
@@ -116,6 +118,18 @@ export function SearchExperience() {
     }
 
     setFeedbackState(value);
+
+    if (value === "miss") {
+      setRetryContext({
+        previousSessionId: result.sessionId,
+        rejectedEntities: result.candidateEntities
+          .slice(0, 3)
+          .map((candidate) => candidate.label)
+          .filter(Boolean),
+      });
+    } else {
+      setRetryContext(null);
+    }
 
     try {
       await postJson("/api/events/feedback", {
@@ -229,6 +243,13 @@ export function SearchExperience() {
           손그림과 설명을 바탕으로 내부적으로 여러 번 검색어를 조정해 가장 가까운
           결과를 다시 모읍니다.
         </div>
+        {retryContext?.rejectedEntities.length ? (
+          <div className="mt-3 rounded-[18px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            이전에 아니라고 한 후보를 제외하고 다시 탐색합니다:
+            {" "}
+            {retryContext.rejectedEntities.join(", ")}
+          </div>
+        ) : null}
         {errorMessage ? (
           <p className="mt-3 rounded-[18px] bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {errorMessage}

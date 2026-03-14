@@ -391,6 +391,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           "Check whether colors, geometry, and where the user saw it match the observed results.",
           "If the result colors or usage context drift away from the user evidence, reject the current hypothesis and refine.",
           "If not, rewrite the queries toward the real-world target such as official logo, icon, product photo, or object reference.",
+          "If a previous attempt explicitly rejected certain entities, do not return them again unless the observed results provide strong contradictory evidence.",
           "Ignore seller noise, model numbers, and unrelated retail clutter unless they strongly identify the target.",
           "Do not overfit to famous brands or apps from one generic clue like a color or the word browser.",
           "Do not use drawing, sketch, doodle, or illustration terms in search queries.",
@@ -400,6 +401,9 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
           `Refine strategy directive: ${context.strategyDirective}`,
+          context.rejectedEntities.length
+            ? `Previously rejected hypotheses: ${context.rejectedEntities.join(" | ")}`
+            : "Previously rejected hypotheses: (none)",
           `Initial search intent: ${context.previousPlan.searchIntent}`,
           `Initial observations: ${context.previousPlan.observations.join(" | ") || "(none)"}`,
           "Seed candidates (coarse hypotheses only, safe to reject):",
@@ -428,6 +432,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           "Generate multiple competing hypotheses from scratch and keep them diverse when evidence is weak.",
           "Only commit to an exact entity like a brand, app, product line, or object when the evidence really supports it.",
           "A famous brand should not win from generic clues alone such as one color, one shape, or the place where it was seen.",
+          "If a previous attempt explicitly rejected certain entities, avoid returning them again unless new evidence strongly overturns that rejection.",
           "Use color combinations, geometry, repeated marks, and viewing context as evidence.",
           "Search queries must be short, concrete, and good for image search.",
           "Do not use drawing, sketch, doodle, or illustration terms in the search queries.",
@@ -437,6 +442,9 @@ function createReasoningAgent(): SearchReasoningAgent | null {
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
           `Plan strategy directive: ${context.strategyDirective}`,
+          context.rejectedEntities.length
+            ? `Previously rejected hypotheses: ${context.rejectedEntities.join(" | ")}`
+            : "Previously rejected hypotheses: (none)",
           `Fallback prompt plan: ${context.promptPlan.searchPrompts.join(" | ")}`,
           context.promptPlan.regenerationPrompt
             ? `Reference-style prompt: ${context.promptPlan.regenerationPrompt}`
@@ -529,6 +537,7 @@ export async function runLangGraphSearchAgent(
       const plan = await reasoningAgent.planSearch({
         input: state.input,
         promptPlan: state.promptPlan,
+        rejectedEntities: state.input.retryContext?.rejectedEntities ?? [],
         seedCandidates: state.seedCandidates,
         strategyDirective:
           state.planPolicyDecision?.directiveText ?? buildNeutralDirective("plan"),
@@ -621,6 +630,7 @@ export async function runLangGraphSearchAgent(
           searchQueries: state.searchPrompts,
         },
         promptPlan: state.promptPlan,
+        rejectedEntities: state.input.retryContext?.rejectedEntities ?? [],
         seedCandidates: state.candidateEntities.length ? state.candidateEntities : state.seedCandidates,
         strategyDirective:
           state.refinePolicyDecision?.directiveText ?? buildNeutralDirective("refine"),

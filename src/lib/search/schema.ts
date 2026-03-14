@@ -18,9 +18,15 @@ const sketchSummarySchema = z.object({
   }),
 });
 
+const retryContextSchema = z.object({
+  previousSessionId: z.string().uuid().nullable().optional().default(null),
+  rejectedEntities: z.array(z.string().trim().min(1).max(120)).max(6).default([]),
+});
+
 export const searchInputSchema = z.object({
   hasDrawing: z.boolean().default(false),
   locale: z.string().trim().min(2).default("ko-KR"),
+  retryContext: retryContextSchema.nullable().optional().default(null),
   sketchDataUrl: z
     .string()
     .trim()

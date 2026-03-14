@@ -53,6 +53,7 @@ export type SearchPlanningContext = {
     regenerationPrompt: string | null;
     searchPrompts: string[];
   };
+  rejectedEntities: string[];
   seedCandidates: EntityCandidate[];
   strategyDirective: string;
 };
@@ -65,6 +66,7 @@ export type SearchAssessmentContext = {
     regenerationPrompt: string | null;
     searchPrompts: string[];
   };
+  rejectedEntities: string[];
   seedCandidates: EntityCandidate[];
   strategyDirective: string;
 };

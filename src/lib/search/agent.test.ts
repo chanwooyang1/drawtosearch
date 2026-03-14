@@ -236,11 +236,13 @@ describe("runSearchAgent", () => {
     ]);
     expect(planSearch).toHaveBeenCalledWith(
       expect.objectContaining({
+        rejectedEntities: [],
         strategyDirective: "Prioritize service icon hypotheses.",
       }),
     );
     expect(assessResults).toHaveBeenCalledWith(
       expect.objectContaining({
+        rejectedEntities: [],
         strategyDirective: "Use viewing context first.",
       }),
     );
@@ -292,5 +294,85 @@ describe("runSearchAgent", () => {
 
     expect(plan.actionName).toBe("neutral");
     expect(plan.policyVersion).toBe("neutral-v1");
+  });
+
+  it("passes rejected hypotheses into the planning and assessment context", async () => {
+    const planSearch = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.8,
+          label: "다른 서비스 로고",
+          query: "다른 서비스 로고",
+          rationale: "이전 실패 후보를 제외한 대안입니다.",
+        },
+      ],
+      observations: ["이전 실패 후보를 제외하고 다시 시작합니다."],
+      searchIntent: "대체 서비스 로고 탐색",
+      searchQueries: ["다른 서비스 로고"],
+    });
+    const assessResults = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.81,
+          label: "다른 서비스 로고",
+          query: "다른 서비스 로고 official",
+          rationale: "재탐색 결과 대체 서비스 로고가 더 적합합니다.",
+        },
+      ],
+      observations: ["이전 거절 후보와 다른 결과가 보입니다."],
+      outcome: "confident",
+      resultFocus: ["alternative"],
+      searchQueries: ["다른 서비스 로고 official"],
+    });
+
+    await runSearchAgent(
+      {
+        ...createBrowserInput(),
+        retryContext: {
+          previousSessionId: "66666666-6666-4666-8666-666666666666",
+          rejectedEntities: ["팀뷰어"],
+        },
+      },
+      createSeedCandidates(),
+      {
+        googleSearch: vi.fn().mockResolvedValue([]),
+        naverSearch: vi.fn().mockResolvedValue({
+          items: [],
+          mode: "mock",
+        }),
+        policyEngine: undefined,
+        reasoningAgent: {
+          assessResults,
+          planSearch,
+          selectBest: vi.fn().mockResolvedValue({
+            candidateEntities: [
+              {
+                confidence: 0.8,
+                label: "다른 서비스 로고",
+                query: "다른 서비스 로고 official",
+                rationale: "대체 후보입니다.",
+              },
+            ],
+            observations: ["대체 후보를 유지합니다."],
+            resultFocus: ["alternative"],
+            summary: "이전 거절 후보를 피한 결과입니다.",
+            topQuery: "다른 서비스 로고 official",
+          }),
+        },
+        sessionId: "77777777-7777-4777-8777-777777777777",
+        visionCandidates: [],
+      },
+    );
+
+    expect(planSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rejectedEntities: ["팀뷰어"],
+      }),
+    );
+    expect(assessResults).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rejectedEntities: ["팀뷰어"],
+      }),
+    );
   });
 });

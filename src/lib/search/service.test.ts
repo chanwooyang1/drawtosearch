@@ -250,6 +250,50 @@ describe("searchSketch", () => {
     expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
   });
 
+  it("excludes rejected entities from the next retry search", async () => {
+    const searchAgent = vi.fn().mockImplementation(async (_input, candidates) => ({
+      candidateEntities: candidates,
+      engine: "rule-based",
+      policyDecisions: [],
+      providerMode: "mock",
+      searchPrompts: candidates.map((candidate: { query: string }) => candidate.query),
+      searchTrace: [],
+      topQuery: candidates[0]?.query ?? "reference",
+      totalResults: [],
+    }));
+
+    const result = await searchSketch(
+      {
+        hasDrawing: false,
+        locale: "ko-KR",
+        retryContext: {
+          previousSessionId: "11111111-1111-4111-8111-111111111111",
+          rejectedEntities: ["실제 로고 또는 심볼"],
+        },
+        sketchDataUrl: null,
+        sketchSummary: null,
+        userText: "파란색과 흰색 로고 같아요",
+      },
+      {
+        persistSession: vi.fn().mockResolvedValue(undefined),
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    const passedCandidates = searchAgent.mock.calls[0]?.[1] ?? [];
+
+    expect(
+      passedCandidates.some((candidate: { label: string }) => candidate.label === "실제 로고 또는 심볼"),
+    ).toBeFalsy();
+    expect(
+      result.candidateEntities.some((candidate) => candidate.label === "실제 로고 또는 심볼"),
+    ).toBeFalsy();
+  });
+
   it("refines prompts after reading first-pass search results", async () => {
     const naverSearch = vi
       .fn()

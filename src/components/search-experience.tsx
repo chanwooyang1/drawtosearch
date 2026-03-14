@@ -70,6 +70,8 @@ export function SearchExperience() {
   const resultSectionRef = useRef<HTMLElement | null>(null);
   const [userText, setUserText] = useState("");
   const [clarificationAnswers, setClarificationAnswers] = useState<SearchClarificationAnswer[]>([]);
+  const [pendingClarificationAnswer, setPendingClarificationAnswer] =
+    useState<SearchClarificationAnswer | null>(null);
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [feedbackState, setFeedbackState] = useState<FeedbackState>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -83,6 +85,7 @@ export function SearchExperience() {
   }) => {
     setSearchState("loading");
     setErrorMessage(null);
+    setPendingClarificationAnswer(options?.clarificationAnswer ?? null);
 
     const nextClarificationAnswers = options?.clarificationAnswer
       ? [
@@ -110,11 +113,13 @@ export function SearchExperience() {
       const nextResult = await postJson<SearchResponse>("/api/search", payload);
       startTransition(() => {
         setClarificationAnswers(nextClarificationAnswers);
+        setPendingClarificationAnswer(null);
         setResult(nextResult);
         setFeedbackState(null);
         setSearchState("success");
       });
     } catch (error) {
+      setPendingClarificationAnswer(null);
       setSearchState("error");
       setErrorMessage(
         error instanceof Error ? error.message : "검색을 진행하지 못했습니다.",
@@ -356,19 +361,24 @@ export function SearchExperience() {
                   </p>
                   <div className="mt-3 grid gap-2">
                     {result.clarification.options.map((option) => {
-                      const isSelected = clarificationAnswers.some(
-                        (answer) =>
-                          answer.questionId === result.clarification?.id &&
-                          answer.answer === option,
-                      );
+                      const isPending =
+                        pendingClarificationAnswer?.questionId === result.clarification?.id &&
+                        pendingClarificationAnswer?.answer === option;
+                      const isSelected =
+                        isPending ||
+                        clarificationAnswers.some(
+                          (answer) =>
+                            answer.questionId === result.clarification?.id &&
+                            answer.answer === option,
+                        );
 
                       return (
                         <button
                           key={option}
-                          className={`rounded-[18px] border px-4 py-3 text-left text-sm font-medium transition ${
+                          className={`flex items-center justify-between gap-3 rounded-[18px] border px-4 py-3 text-left text-sm font-medium transition active:translate-y-0.5 active:scale-[0.99] ${
                             isSelected
-                              ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent-deep)]"
-                              : "border-[color:var(--surface-border)] bg-white/75 text-[color:var(--foreground)] hover:border-[color:var(--accent)]"
+                              ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent-deep)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.03)]"
+                              : "border-[color:var(--surface-border)] bg-white/75 text-[color:var(--foreground)] hover:border-[color:var(--accent)] hover:bg-white"
                           }`}
                           disabled={searchState === "loading"}
                           onClick={() =>
@@ -381,7 +391,10 @@ export function SearchExperience() {
                           }
                           type="button"
                         >
-                          {option}
+                          <span>{option}</span>
+                          {isPending && searchState === "loading" ? (
+                            <LoaderCircle className="size-4 shrink-0 animate-spin text-[color:var(--accent-deep)]" />
+                          ) : null}
                         </button>
                       );
                     })}

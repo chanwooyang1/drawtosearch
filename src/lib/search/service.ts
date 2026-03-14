@@ -216,6 +216,19 @@ function buildReferenceResults(input: {
     .slice(0, 2);
 }
 
+function buildFeedbackTargets(input: {
+  displayResults: SearchImageResult[];
+  fallbackResults: SearchImageResult[];
+  referenceResults: SearchImageResult[];
+}) {
+  const visibleResults = [
+    ...input.referenceResults,
+    ...(input.displayResults.length ? input.displayResults : input.fallbackResults),
+  ];
+
+  return dedupeStrings(visibleResults.map((result) => result.title)).slice(0, 3);
+}
+
 export async function searchSketch(
   input: SearchInput,
   dependencies: SearchDependencies = {},
@@ -446,9 +459,15 @@ export async function searchSketch(
     topHypotheses: activeHypotheses,
     visibleResults: displayResults.length ? displayResults : reranked.results,
   });
+  const feedbackTargets = buildFeedbackTargets({
+    displayResults,
+    fallbackResults: reranked.results,
+    referenceResults,
+  });
 
   return {
     candidateEntities: finalCandidates,
+    feedbackTargets,
     handoffUrls: buildHandoffUrls(topQuery),
     imageAssistMode,
     naverResults: displayResults.length ? displayResults : reranked.results,

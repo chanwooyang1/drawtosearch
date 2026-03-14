@@ -136,6 +136,7 @@ export type SearchHandoffUrls = {
 
 export type SearchResponse = {
   candidateEntities: EntityCandidate[];
+  feedbackTargets: string[];
   handoffUrls: SearchHandoffUrls;
   imageAssistMode: ImageAssistMode;
   naverResults: SearchImageResult[];

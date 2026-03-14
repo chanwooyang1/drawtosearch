@@ -173,10 +173,12 @@ export function SearchExperience() {
     if (value === "miss") {
       setRetryContext({
         previousSessionId: result.sessionId,
-        rejectedEntities: result.candidateEntities
-          .slice(0, 3)
-          .map((candidate) => candidate.label)
-          .filter(Boolean),
+        rejectedEntities: result.feedbackTargets.length
+          ? result.feedbackTargets
+          : result.candidateEntities
+              .slice(0, 3)
+              .map((candidate) => candidate.label)
+              .filter(Boolean),
       });
     } else {
       setRetryContext(null);
@@ -296,7 +298,7 @@ export function SearchExperience() {
         </div>
         {retryContext?.rejectedEntities.length ? (
           <div className="mt-3 rounded-[18px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            이전에 아니라고 한 후보를 제외하고 다시 탐색합니다:
+            이전에 아니라고 한 이미지 후보를 제외하고 다시 탐색합니다:
             {" "}
             {retryContext.rejectedEntities.join(", ")}
           </div>

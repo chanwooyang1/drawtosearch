@@ -172,6 +172,7 @@ describe("searchSketch", () => {
     expect(result.naverResults[0]?.title).toMatch(/TeamViewer/i);
     expect(result.candidateEntities[0]?.label).toMatch(/TeamViewer/i);
     expect(result.referenceResults).toEqual([]);
+    expect(result.feedbackTargets).toEqual(["TeamViewer remote support logo"]);
   });
 
   it("shows a local reference image when an internal candidate is not visible in web results", async () => {
@@ -267,6 +268,10 @@ describe("searchSketch", () => {
     expect(result.referenceResults).toHaveLength(1);
     expect(result.referenceResults[0]?.title).toMatch(/TeamViewer/i);
     expect(result.referenceResults[0]?.source).toBe("local");
+    expect(result.feedbackTargets).toEqual([
+      "TeamViewer remote support logo",
+      "Blue service icon roundup",
+    ]);
   });
 
   it("persists policy decisions with the same generated session id", async () => {

@@ -5,6 +5,15 @@ import { createSearchPolicyEngine } from "@/lib/policy/engine";
 import { recordPolicyDecisions, dbPolicySnapshotStore } from "@/lib/policy/store";
 import type { SearchPolicyEngine } from "@/lib/policy/types";
 
+import { buildClarificationPrompt } from "./clarification";
+import { buildEvidenceBundle } from "./evidence";
+import {
+  buildHypotheses,
+  buildHypothesisCandidates,
+  refineHypothesesFromResults,
+} from "./hypotheses";
+import { searchReferenceIndex } from "./reference-index";
+import { deriveCandidatesFromResults, rerankResults } from "./rerank";
 import { runSearchAgent, type SearchAgentDependencies } from "./agent";
 import { interpretWithHeuristics, mergeCandidates } from "./heuristics";
 import { buildPromptPlan } from "./prompt";
@@ -19,6 +28,7 @@ type SearchDependencies = {
   policyEngine?: SearchPolicyEngine;
   persistPolicyDecisions?: typeof recordPolicyDecisions;
   persistSession?: typeof recordSearchSession;
+  referenceSearch?: typeof searchReferenceIndex;
   reasoningAgent?: SearchAgentDependencies["reasoningAgent"];
   searchAgent?: typeof runSearchAgent;
   visionInterpreter?: typeof interpretWithVision;
@@ -78,6 +88,7 @@ export async function searchSketch(
   const persistPolicyDecisions =
     dependencies.persistPolicyDecisions ?? recordPolicyDecisions;
   const persistSession = dependencies.persistSession ?? recordSearchSession;
+  const referenceSearch = dependencies.referenceSearch ?? searchReferenceIndex;
   const reasoningAgent = dependencies.reasoningAgent;
   const searchAgent = dependencies.searchAgent ?? runSearchAgent;
   const visionInterpreter = dependencies.visionInterpreter ?? interpretWithVision;
@@ -120,12 +131,26 @@ export async function searchSketch(
     }),
     rejectedEntities,
   );
-
-  const queryVariants = dedupeStrings(
-    candidateEntities.flatMap((candidate) => candidate.queryVariants),
-  ).slice(0, 6);
-  const promptPlan = buildPromptPlan(input, candidateEntities);
-  const agentResult = await searchAgent(input, candidateEntities, {
+  const evidence = buildEvidenceBundle({
+    input,
+    visionCandidates,
+  });
+  const hypotheses = buildHypotheses({
+    evidence,
+    seedCandidates: candidateEntities,
+  });
+  const hypothesisCandidates = buildHypothesisCandidates(hypotheses, input.userText);
+  const initialCandidates = excludeRejectedCandidates(
+    mergeCandidates([...candidateEntities, ...hypothesisCandidates]),
+    rejectedEntities,
+  );
+  const promptPlan = buildPromptPlan(input, initialCandidates);
+  const localResultsPass1 = await referenceSearch({
+    evidence,
+    hypotheses,
+    limit: 20,
+  });
+  const agentResultPass1 = await searchAgent(input, initialCandidates, {
     googleSearch,
     naverSearch,
     policyEngine,
@@ -133,13 +158,94 @@ export async function searchSketch(
     sessionId,
     visionCandidates,
   });
+  let activeHypotheses = hypotheses;
+  let activeCandidates = initialCandidates;
+  let activeAgentResult = agentResultPass1;
+  let activeLocalResults = localResultsPass1;
+  let searchPrompts = agentResultPass1.searchPrompts;
+  let policyDecisions = [...agentResultPass1.policyDecisions];
+  let reranked = rerankResults({
+    candidateEntities: initialCandidates,
+    evidence,
+    localResults: localResultsPass1,
+    topHypotheses: hypotheses,
+    webResults: agentResultPass1.totalResults,
+  });
+
+  if (reranked.ambiguous) {
+    const refinedHypotheses = refineHypothesesFromResults({
+      baseHypotheses: hypotheses,
+      topLabels: reranked.results.slice(0, 2).map((result) => result.title),
+    });
+    const refinedCandidates = excludeRejectedCandidates(
+      mergeCandidates([
+        ...buildHypothesisCandidates(refinedHypotheses, input.userText),
+        ...deriveCandidatesFromResults({
+          existing: initialCandidates,
+          results: reranked.results,
+          userText: input.userText,
+        }),
+      ]),
+      rejectedEntities,
+    );
+    const localResultsPass2 = await referenceSearch({
+      evidence,
+      hypotheses: refinedHypotheses,
+      limit: 20,
+    });
+    const agentResultPass2 = await searchAgent(input, refinedCandidates, {
+      googleSearch,
+      naverSearch,
+      policyEngine,
+      reasoningAgent,
+      sessionId,
+      visionCandidates,
+    });
+
+    activeHypotheses = refinedHypotheses;
+    activeCandidates = refinedCandidates;
+    activeAgentResult = agentResultPass2;
+    activeLocalResults = localResultsPass2;
+    searchPrompts = dedupeStrings([
+      ...agentResultPass1.searchPrompts,
+      ...agentResultPass2.searchPrompts,
+    ]).slice(0, 8);
+    policyDecisions = [...policyDecisions, ...agentResultPass2.policyDecisions];
+    reranked = rerankResults({
+      candidateEntities: refinedCandidates,
+      evidence,
+      localResults: localResultsPass2,
+      topHypotheses: refinedHypotheses,
+      webResults: agentResultPass2.totalResults,
+    });
+  }
+
+  const clarification =
+    !input.clarificationAnswers?.length && reranked.clarificationNeeded
+      ? buildClarificationPrompt({
+          evidence,
+          hypotheses: activeHypotheses,
+          results: reranked.results,
+        })
+      : null;
+  const resultMode = clarification ? "needs_clarification" : "resolved";
   const finalCandidates = excludeRejectedCandidates(
-    agentResult.candidateEntities.length
-      ? agentResult.candidateEntities
-      : candidateEntities,
+    deriveCandidatesFromResults({
+      existing: activeAgentResult.candidateEntities.length
+        ? activeAgentResult.candidateEntities
+        : activeCandidates,
+      results: reranked.results,
+      userText: input.userText,
+    }),
     rejectedEntities,
   );
-  const topQuery = agentResult.topQuery;
+  const queryVariants = dedupeStrings(
+    finalCandidates.flatMap((candidate) => candidate.queryVariants),
+  ).slice(0, 8);
+  const topQuery =
+    finalCandidates[0]?.query ??
+    reranked.results[0]?.query ??
+    activeAgentResult.topQuery;
   const topCandidate = finalCandidates[0];
   const imageAssistMode =
     visionCandidates.length > 0
@@ -147,14 +253,26 @@ export async function searchSketch(
       : input.hasDrawing
         ? "sketch-structure"
         : "text-only";
+  const reasoning = dedupeStrings([
+    ...heuristic.reasoning,
+    ...promptPlan.promptReasoning,
+    ...visionReasoning,
+    activeLocalResults[0]
+      ? `로컬 reference index가 ${activeLocalResults[0].title} 같은 근접 레퍼런스를 우선 후보로 찾았습니다.`
+      : "",
+    clarification
+      ? "자동 재검색 뒤에도 ambiguity가 남아 확인 질문 1회를 준비했습니다."
+      : "자동 재검색 범위 안에서 결과를 resolve했습니다.",
+  ]);
+  const combinedTrace = activeAgentResult.searchTrace;
 
-  if (agentResult.searchTrace.length) {
+  if (combinedTrace.length) {
     console.info(
       "[drawtosearch-agent]",
       JSON.stringify({
         sessionId,
-        engine: agentResult.engine,
-        trace: agentResult.searchTrace,
+        engine: activeAgentResult.engine,
+        trace: combinedTrace,
       }),
     );
   }
@@ -163,26 +281,28 @@ export async function searchSketch(
     candidateEntities: finalCandidates,
     confidence: topCandidate?.confidence ?? 0,
     locale: input.locale,
-    providerMode: agentResult.providerMode,
-    queryVariants: agentResult.searchPrompts,
+    providerMode: activeAgentResult.providerMode,
+    queryVariants: searchPrompts,
     sessionId,
     topEntity: topCandidate?.label ?? "이미지 후보",
     topQuery,
     userText: input.userText,
   });
 
-  await persistPolicyDecisions(agentResult.policyDecisions);
+  await persistPolicyDecisions(policyDecisions);
 
   return {
     candidateEntities: finalCandidates,
     handoffUrls: buildHandoffUrls(topQuery),
     imageAssistMode,
-    naverResults: agentResult.totalResults,
-    providerMode: agentResult.providerMode,
+    naverResults: reranked.results,
+    providerMode: activeAgentResult.providerMode,
     queryVariants,
+    clarification,
     regenerationPrompt: promptPlan.regenerationPrompt,
-    reasoning: [...heuristic.reasoning, ...promptPlan.promptReasoning, ...visionReasoning],
-    searchPrompts: agentResult.searchPrompts,
+    resultMode,
+    reasoning,
+    searchPrompts,
     sessionId,
   };
 }

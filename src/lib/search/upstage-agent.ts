@@ -228,6 +228,16 @@ function summarizeSketch(input: SearchInput) {
   return descriptors.join(", ");
 }
 
+function summarizeClarificationAnswers(input: SearchInput) {
+  if (!input.clarificationAnswers?.length) {
+    return "(none)";
+  }
+
+  return input.clarificationAnswers
+    .map((answer) => `${answer.questionId}: ${answer.answer}`)
+    .join(" | ");
+}
+
 function formatSeedCandidates(candidates: EntityCandidate[]) {
   if (!candidates.length) {
     return "- none";
@@ -400,6 +410,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new HumanMessage([
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
+          `Clarification answers: ${summarizeClarificationAnswers(context.input)}`,
           `Refine strategy directive: ${context.strategyDirective}`,
           context.rejectedEntities.length
             ? `Previously rejected hypotheses: ${context.rejectedEntities.join(" | ")}`
@@ -441,6 +452,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new HumanMessage([
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
+          `Clarification answers: ${summarizeClarificationAnswers(context.input)}`,
           `Plan strategy directive: ${context.strategyDirective}`,
           context.rejectedEntities.length
             ? `Previously rejected hypotheses: ${context.rejectedEntities.join(" | ")}`
@@ -470,6 +482,7 @@ function createReasoningAgent(): SearchReasoningAgent | null {
         new HumanMessage([
           `User hint: ${context.input.userText || "(none)"}`,
           `Sketch summary: ${summarizeSketch(context.input)}`,
+          `Clarification answers: ${summarizeClarificationAnswers(context.input)}`,
           `Initial plan queries: ${context.plan.searchQueries.join(" | ")}`,
           context.assessment
             ? `Assessment outcome: ${context.assessment.outcome}`

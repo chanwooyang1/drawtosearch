@@ -29,10 +29,20 @@ function extractDetailTokens(input: SearchInput, candidates: EntityCandidate[]) 
   const reserved = new Set(
     tokenizeSearchText(`${anchorCandidate?.label ?? ""} ${anchorCandidate?.query ?? ""}`),
   );
+  const clarificationText = (input.clarificationAnswers ?? [])
+    .map((answer) => answer.answer)
+    .join(" ");
 
-  return tokenizeSearchText(input.userText)
+  return tokenizeSearchText(`${input.userText} ${clarificationText}`)
     .filter((token) => !reserved.has(token))
     .slice(0, 5);
+}
+
+function formatClarificationPhrase(input: SearchInput) {
+  return (input.clarificationAnswers ?? [])
+    .map((answer) => answer.answer.trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function buildPromptPlan(
@@ -47,8 +57,10 @@ export function buildPromptPlan(
   const detailPhrase = detailTokens.join(" ");
   const sketchPhrase = sketchDescriptors.join(" ");
   const anchoredCandidate = candidates.find((candidate) => canAnchorPrompt(candidate));
+  const clarificationPhrase = formatClarificationPhrase(input);
   const genericEvidencePhrase = compactPhrase([
     input.userText,
+    clarificationPhrase,
     detailPhrase,
     sketchPhrase,
   ]);
@@ -56,6 +68,7 @@ export function buildPromptPlan(
   const searchPrompts = dedupeStrings([
     compactPhrase([
       input.userText,
+      clarificationPhrase,
       sketchPhrase,
       "실제 reference image",
     ]),
@@ -80,6 +93,7 @@ export function buildPromptPlan(
     anchoredCandidate?.query
       ? compactPhrase([
           anchoredCandidate.query,
+          clarificationPhrase,
           detailPhrase,
           sketchPhrase,
           "reference image",
@@ -97,7 +111,6 @@ export function buildPromptPlan(
       : "",
     compactPhrase([
       genericEvidencePhrase,
-      sketchPhrase,
       "reference image",
     ]),
   ]).slice(0, 6);
@@ -106,6 +119,7 @@ export function buildPromptPlan(
     ? compactPhrase([
         `${(anchoredCandidate ?? topCandidate)?.label} 관련 가능성이 있는 대상.`,
         input.userText ? `사용자 힌트: ${input.userText}.` : "",
+        clarificationPhrase ? `추가 확인 답변: ${clarificationPhrase}.` : "",
         detailPhrase ? `핵심 디테일: ${detailPhrase}.` : "",
         sketchPhrase ? `스케치 구조: ${sketchPhrase}.` : "",
         "검색용 참조 이미지를 만든다고 가정하고, 실제 로고나 사물의 증거를 확인하기 쉬운 단순한 reference 스타일.",
@@ -113,6 +127,7 @@ export function buildPromptPlan(
     : input.userText
       ? compactPhrase([
           `사용자 힌트: ${input.userText}.`,
+          clarificationPhrase ? `추가 확인 답변: ${clarificationPhrase}.` : "",
           sketchPhrase ? `스케치 구조: ${sketchPhrase}.` : "",
           "형태와 색 조합이 또렷한 실제 reference 이미지 스타일.",
         ])
@@ -130,6 +145,9 @@ export function buildPromptPlan(
       : "",
     !anchoredCandidate
       ? "특정 브랜드를 미리 가정하지 않고 입력 증거만으로 첫 검색 프롬프트를 만들었습니다."
+      : "",
+    clarificationPhrase
+      ? `확인 질문 답변에서 ${clarificationPhrase} 단서를 추가해 검색 프롬프트를 좁혔습니다.`
       : "",
     input.retryContext?.rejectedEntities?.length
       ? `이전 실패 시도에서 ${input.retryContext.rejectedEntities.join(", ")} 후보를 제외해야 한다는 피드백을 반영했습니다.`

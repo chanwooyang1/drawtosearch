@@ -23,7 +23,18 @@ const retryContextSchema = z.object({
   rejectedEntities: z.array(z.string().trim().min(1).max(120)).max(6).default([]),
 });
 
+const clarificationAnswerSchema = z.object({
+  answer: z.string().trim().min(1).max(120),
+  questionId: z.string().trim().min(1).max(80),
+});
+
 export const searchInputSchema = z.object({
+  clarificationAnswers: z
+    .array(clarificationAnswerSchema)
+    .max(3)
+    .nullable()
+    .optional()
+    .default(null),
   hasDrawing: z.boolean().default(false),
   locale: z.string().trim().min(2).default("ko-KR"),
   retryContext: retryContextSchema.nullable().optional().default(null),

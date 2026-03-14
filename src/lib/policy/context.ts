@@ -184,10 +184,23 @@ function uniq<T>(values: T[]) {
 }
 
 export function extractColorTokens(text: string) {
+  const aliases = Object.entries(COLOR_ALIASES).sort(
+    (left, right) => right[0].length - left[0].length,
+  );
+
   return uniq(
     tokenizeSearchText(text)
-      .map((token) => COLOR_ALIASES[token])
-      .filter(Boolean),
+      .map((token) => {
+        const direct = COLOR_ALIASES[token];
+
+        if (direct) {
+          return direct;
+        }
+
+        const partial = aliases.find(([alias]) => token.startsWith(alias));
+        return partial?.[1];
+      })
+      .filter((value): value is string => Boolean(value)),
   ).slice(0, 4);
 }
 

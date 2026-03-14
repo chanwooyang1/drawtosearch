@@ -3,7 +3,11 @@
 import { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 import { LoaderCircle, Search, Sparkles, ExternalLink } from "lucide-react";
 
-import type { SearchResponse, SearchRetryContext } from "@/lib/search/types";
+import type {
+  SearchClarificationAnswer,
+  SearchResponse,
+  SearchRetryContext,
+} from "@/lib/search/types";
 
 import { SketchCanvas, type SketchCanvasHandle } from "./sketch-canvas";
 
@@ -38,10 +42,34 @@ function getImageAssistLabel(mode: SearchResponse["imageAssistMode"]) {
   }
 }
 
+function getProviderLabel(result: SearchResponse) {
+  const hasLocalResults = result.naverResults.some((item) => item.source === "local");
+
+  if (result.providerMode === "live") {
+    return hasLocalResults ? "Hybrid live" : "NAVER live";
+  }
+
+  return hasLocalResults ? "Hybrid demo" : "Demo fallback";
+}
+
+function getResultSourceLabel(source: SearchResponse["naverResults"][number]["source"]) {
+  switch (source) {
+    case "local":
+      return "Local reference";
+    case "naver":
+      return "Naver";
+    case "google":
+      return "Google";
+    default:
+      return "Demo";
+  }
+}
+
 export function SearchExperience() {
   const canvasRef = useRef<SketchCanvasHandle>(null);
   const resultSectionRef = useRef<HTMLElement | null>(null);
   const [userText, setUserText] = useState("");
+  const [clarificationAnswers, setClarificationAnswers] = useState<SearchClarificationAnswer[]>([]);
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [feedbackState, setFeedbackState] = useState<FeedbackState>(null);
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -49,13 +77,28 @@ export function SearchExperience() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const deferredText = useDeferredValue(userText);
 
-  const runSearch = async () => {
+  const runSearch = async (options?: {
+    clarificationAnswer?: SearchClarificationAnswer;
+    resetClarification?: boolean;
+  }) => {
     setSearchState("loading");
     setErrorMessage(null);
+
+    const nextClarificationAnswers = options?.clarificationAnswer
+      ? [
+          ...clarificationAnswers.filter(
+            (answer) => answer.questionId !== options.clarificationAnswer?.questionId,
+          ),
+          options.clarificationAnswer,
+        ]
+      : options?.resetClarification
+        ? []
+        : clarificationAnswers;
 
     try {
       const sketch = await canvasRef.current?.exportSketch();
       const payload = {
+        clarificationAnswers: nextClarificationAnswers,
         locale: "ko-KR",
         retryContext,
         sketchDataUrl: sketch?.dataUrl ?? null,
@@ -66,6 +109,7 @@ export function SearchExperience() {
 
       const nextResult = await postJson<SearchResponse>("/api/search", payload);
       startTransition(() => {
+        setClarificationAnswers(nextClarificationAnswers);
         setResult(nextResult);
         setFeedbackState(null);
         setSearchState("success");
@@ -224,7 +268,7 @@ export function SearchExperience() {
         <button
           className="flex w-full items-center justify-center gap-2 rounded-[22px] bg-[color:var(--accent)] px-4 py-4 text-sm font-semibold text-white transition hover:bg-[color:var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={searchState === "loading"}
-          onClick={runSearch}
+          onClick={() => void runSearch({ resetClarification: true })}
           type="button"
         >
           {searchState === "loading" ? (
@@ -274,7 +318,7 @@ export function SearchExperience() {
                 {getImageAssistLabel(result.imageAssistMode)}
               </div>
               <div className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[color:var(--ink-soft)]">
-                {result.providerMode === "live" ? "NAVER live" : "Demo fallback"}
+                {getProviderLabel(result)}
               </div>
             </div>
           </div>
@@ -285,12 +329,63 @@ export function SearchExperience() {
                 <Sparkles className="mt-0.5 size-4 text-[color:var(--accent)]" />
                 <div>
                   <h3 className="font-semibold text-[color:var(--foreground)]">
-                    가장 가까운 추정: {primaryCandidate.label}
+                    {result.resultMode === "needs_clarification"
+                      ? `가장 가까운 가설: ${primaryCandidate.label}`
+                      : `가장 가까운 추정: ${primaryCandidate.label}`}
                   </h3>
                   <p className="mt-1 text-sm leading-6 text-[color:var(--ink-soft)]">
-                    손그림, 설명, 검색 결과를 함께 읽어 지금 단계에서 가장 유력한
-                    대상을 우선 정리했습니다.
+                    {result.resultMode === "needs_clarification"
+                      ? "자동 재검색까지 마쳤지만 아직 비슷한 후보가 남아 있어요. 한 번만 더 확인하면 더 정확하게 좁힐 수 있습니다."
+                      : "손그림, 설명, 검색 결과를 함께 읽어 지금 단계에서 가장 유력한 대상을 우선 정리했습니다."}
                   </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {result.resultMode === "needs_clarification" && result.clarification ? (
+            <div className="mt-4 rounded-[24px] border border-[color:var(--surface-border)] bg-[color:var(--surface-strong)] p-4">
+              <div className="flex items-start gap-3">
+                <Sparkles className="mt-0.5 size-4 text-[color:var(--accent)]" />
+                <div className="w-full">
+                  <h3 className="font-semibold text-[color:var(--foreground)]">
+                    한 가지만 더 확인할게요
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-[color:var(--ink-soft)]">
+                    {result.clarification.question}
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {result.clarification.options.map((option) => {
+                      const isSelected = clarificationAnswers.some(
+                        (answer) =>
+                          answer.questionId === result.clarification?.id &&
+                          answer.answer === option,
+                      );
+
+                      return (
+                        <button
+                          key={option}
+                          className={`rounded-[18px] border px-4 py-3 text-left text-sm font-medium transition ${
+                            isSelected
+                              ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)] text-[color:var(--accent-deep)]"
+                              : "border-[color:var(--surface-border)] bg-white/75 text-[color:var(--foreground)] hover:border-[color:var(--accent)]"
+                          }`}
+                          disabled={searchState === "loading"}
+                          onClick={() =>
+                            void runSearch({
+                              clarificationAnswer: {
+                                answer: option,
+                                questionId: result.clarification?.id ?? "clarification",
+                              },
+                            })
+                          }
+                          type="button"
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -325,9 +420,11 @@ export function SearchExperience() {
             <div className="mb-3 flex items-center justify-between">
               <h3 className="ink-title text-lg">인앱 이미지 결과</h3>
               <div className="text-xs text-[color:var(--ink-soft)]">
-                {result.providerMode === "live"
-                  ? "NAVER 검색 결과"
-                  : "API 키가 없어서 데모 카드가 표시됩니다."}
+                {result.naverResults.some((imageResult) => imageResult.source === "local")
+                  ? "로컬 reference와 웹 검색 결과를 함께 다시 정렬했습니다."
+                  : result.providerMode === "live"
+                    ? "NAVER 검색 결과"
+                    : "API 키가 없어서 데모 카드가 표시됩니다."}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -349,6 +446,16 @@ export function SearchExperience() {
                     src={imageResult.thumbnailUrl}
                   />
                   <div className="space-y-1 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded-full bg-[color:var(--accent-soft)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--accent-deep)]">
+                        {getResultSourceLabel(imageResult.source)}
+                      </span>
+                      {imageResult.rerankFeatures?.totalScore ? (
+                        <span className="text-[10px] text-[color:var(--ink-soft)]">
+                          score {(imageResult.rerankFeatures.totalScore * 100).toFixed(0)}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="line-clamp-2 text-sm font-medium text-[color:var(--foreground)]">
                       {imageResult.title}
                     </p>

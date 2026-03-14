@@ -22,6 +22,18 @@ npm run dev
 
 Open `http://localhost:3000` on a phone-sized viewport to see the intended layout.
 
+### Local Postgres
+
+If you want anonymous policy logs and rewards to persist locally, boot the bundled Postgres helper:
+
+```bash
+chmod +x scripts/start_local_db.sh scripts/stop_local_db.sh
+./scripts/start_local_db.sh
+npm run db:push
+```
+
+The helper starts a project-local Postgres instance on `127.0.0.1:54322` and prints the `DATABASE_URL` it expects.
+
 ## Environment
 
 Only `NAVER_CLIENT_ID` and `NAVER_CLIENT_SECRET` are required for live image results. Without them, the app still works in demo mode with generated mock cards.
@@ -59,6 +71,7 @@ npm run lint
 npm run build
 npm run test
 npm run test:e2e
+npm run db:push
 npm run db:generate
 ```
 

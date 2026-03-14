@@ -25,6 +25,7 @@
 # misc
 .DS_Store
 *.pem
+/.local-postgres/
 
 # debug
 npm-debug.log*

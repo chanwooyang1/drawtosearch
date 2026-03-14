@@ -80,7 +80,7 @@ describe("searchSketch", () => {
     expect(naverSearch).toHaveBeenCalled();
   });
 
-  it("merges local reference retrieval with web search results", async () => {
+  it("uses local reference retrieval for ranking while showing web images first", async () => {
     const searchAgent = vi.fn().mockResolvedValue({
       candidateEntities: [
         {
@@ -168,9 +168,9 @@ describe("searchSketch", () => {
       },
     );
 
-    expect(result.naverResults.some((entry) => entry.source === "local")).toBeTruthy();
     expect(result.naverResults.some((entry) => entry.source === "mock")).toBeTruthy();
     expect(result.naverResults[0]?.title).toMatch(/TeamViewer/i);
+    expect(result.candidateEntities[0]?.label).toMatch(/TeamViewer/i);
   });
 
   it("persists policy decisions with the same generated session id", async () => {

@@ -74,6 +74,27 @@ function excludeRejectedCandidates(
   return filtered.length ? filtered : candidates;
 }
 
+function buildDisplayResults(input: {
+  candidateEntities: EntityCandidate[];
+  evidence: ReturnType<typeof buildEvidenceBundle>;
+  topHypotheses: ReturnType<typeof buildHypotheses>;
+  webResults: SearchResponse["naverResults"];
+}) {
+  const displayReranked = rerankResults({
+    candidateEntities: input.candidateEntities,
+    evidence: input.evidence,
+    localResults: [],
+    topHypotheses: input.topHypotheses,
+    webResults: input.webResults,
+  });
+
+  if (displayReranked.results.length) {
+    return displayReranked.results;
+  }
+
+  return [];
+}
+
 export async function searchSketch(
   input: SearchInput,
   dependencies: SearchDependencies = {},
@@ -291,11 +312,18 @@ export async function searchSketch(
 
   await persistPolicyDecisions(policyDecisions);
 
+  const displayResults = buildDisplayResults({
+    candidateEntities: finalCandidates,
+    evidence,
+    topHypotheses: activeHypotheses,
+    webResults: activeAgentResult.totalResults.filter((result) => result.source !== "local"),
+  });
+
   return {
     candidateEntities: finalCandidates,
     handoffUrls: buildHandoffUrls(topQuery),
     imageAssistMode,
-    naverResults: reranked.results,
+    naverResults: displayResults.length ? displayResults : reranked.results,
     providerMode: activeAgentResult.providerMode,
     queryVariants,
     clarification,

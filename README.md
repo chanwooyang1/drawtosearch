@@ -11,6 +11,7 @@ DrawToSearch is a mobile-first web experience for sketch-to-image discovery. Use
 - Optional NAVER Image Search live provider
 - Optional Hugging Face vision inference fallback
 - Optional LiteLLM gateway for LLM routing and provider fallback
+- Local reference corpus + hybrid reranker for evidence-first retrieval
 
 ## Local development
 
@@ -67,6 +68,7 @@ UPSTAGE_MODEL=solar-pro2
 
 ```bash
 npm run dev
+npm run corpus:build
 npm run lint
 npm run build
 npm run test
@@ -77,7 +79,10 @@ npm run db:generate
 
 ## Architecture notes
 
-- Search stays text-first. Free vision inference only adds extra candidate labels and queries.
+- Search stays evidence-first. The app converts sketch structure, text hints, clarification answers, and OCR-like vision cues into a shared `EvidenceBundle`.
+- Retrieval is hybrid: a local reference corpus is scanned exactly and merged with web image results before reranking.
+- The UI only shows final cards and a single clarification question when ambiguity remains after two automatic retrieval passes.
+- `npm run corpus:build` rebuilds the local reference artifact. It tries Transformers.js text embeddings first and falls back to heuristic vectors when model download or inference is unavailable.
 - The internal LangGraph reasoner can call Upstage directly or go through LiteLLM. When LiteLLM is present, provider fallback such as Gemini should be configured on the proxy side.
 - Raw sketches are not persisted in v1. Only derived metadata and anonymous interaction events are stored when `DATABASE_URL` is configured.
 - The tracked project skill lives at `skills/drawtosearch-builder/` and is referenced by the repo `AGENTS.md`.

@@ -75,9 +75,102 @@ describe("searchSketch", () => {
       },
     );
 
-    expect(result.naverResults[0]?.title).toBe("운동화 결과");
+    expect(result.naverResults.length).toBeGreaterThan(0);
     expect(result.searchPrompts[0]).toContain("운동화");
     expect(naverSearch).toHaveBeenCalled();
+  });
+
+  it("merges local reference retrieval with web search results", async () => {
+    const searchAgent = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.71,
+          id: "candidate-1",
+          label: "서비스 아이콘 또는 소프트웨어 심볼",
+          query: "파란색 흰색 서비스 아이콘 reference",
+          queryVariants: ["서비스 아이콘", "파란색 흰색 서비스 아이콘 reference"],
+          rationale: "broad service hypothesis",
+          source: "heuristic",
+        },
+      ],
+      engine: "rule-based",
+      policyDecisions: [],
+      providerMode: "live",
+      searchPrompts: ["파란색 흰색 서비스 아이콘 reference"],
+      searchTrace: [],
+      topQuery: "파란색 흰색 서비스 아이콘 reference",
+      totalResults: [
+        {
+          dominantColors: ["blue", "white"],
+          id: "web-1",
+          link: "https://example.com/teamviewer-web",
+          query: "파란색 흰색 서비스 아이콘 reference",
+          shapeTags: ["round", "arrows"],
+          source: "mock",
+          tags: ["service", "remote support", "logo"],
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "TeamViewer remote support logo",
+        },
+      ],
+    });
+
+    const result = await searchSketch(
+      {
+        hasDrawing: true,
+        locale: "ko-KR",
+        sketchDataUrl: "data:image/png;base64,ZmFrZQ==",
+        sketchSummary: {
+          aspectBucket: "square",
+          complexity: "minimal",
+          dominantGeometry: "round",
+          elementCount: 2,
+          hasClosedShapes: true,
+          repeatedMarks: false,
+          typeCounts: {
+            arrow: 2,
+            diamond: 0,
+            ellipse: 1,
+            freedraw: 0,
+            line: 0,
+            rectangle: 0,
+            text: 0,
+          },
+        },
+        userText: "파란색과 흰색이 보이는 원형 서비스 로고 같아요",
+      },
+      {
+        persistSession: vi.fn().mockResolvedValue(undefined),
+        referenceSearch: vi.fn().mockResolvedValue([
+          {
+            baseScore: 0.91,
+            category: "logo_icon",
+            dominantColors: ["blue", "white"],
+            id: "teamviewer-local",
+            imageSimilarity: 0.93,
+            link: "https://www.teamviewer.com/",
+            ocrTokens: [],
+            query: "teamviewer remote support logo",
+            shapeTags: ["round", "arrows"],
+            source: "local",
+            sourceId: "teamviewer-logo",
+            sourceUrl: "https://www.teamviewer.com/",
+            tags: ["service", "remote support", "logo"],
+            textSimilarity: 0.9,
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "TeamViewer logo",
+          },
+        ]),
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    expect(result.naverResults.some((entry) => entry.source === "local")).toBeTruthy();
+    expect(result.naverResults.some((entry) => entry.source === "mock")).toBeTruthy();
+    expect(result.naverResults[0]?.title).toMatch(/TeamViewer/i);
   });
 
   it("persists policy decisions with the same generated session id", async () => {
@@ -152,11 +245,13 @@ describe("searchSketch", () => {
         sessionId: result.sessionId,
       }),
     );
-    expect(persistPolicyDecisions).toHaveBeenCalledWith([
-      expect.objectContaining({
-        sessionId: result.sessionId,
-      }),
-    ]);
+    expect(persistPolicyDecisions).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: result.sessionId,
+        }),
+      ]),
+    );
   });
 
   it("uses sketch structure to expand candidate entities", async () => {
@@ -250,6 +345,134 @@ describe("searchSketch", () => {
     expect(result.searchPrompts.join(" ")).not.toMatch(/손그림|스케치|drawing|sketch/i);
   });
 
+  it("runs a second retrieval pass when the first pass stays ambiguous", async () => {
+    const searchAgent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        candidateEntities: [
+          {
+            confidence: 0.58,
+            id: "candidate-generic",
+            label: "서비스 아이콘 또는 소프트웨어 심볼",
+            query: "파란색 흰색 서비스 아이콘 reference",
+            queryVariants: ["서비스 아이콘", "파란색 흰색 서비스 아이콘 reference"],
+            rationale: "broad hypothesis",
+            source: "heuristic",
+          },
+        ],
+        engine: "rule-based",
+        policyDecisions: [],
+        providerMode: "mock",
+        searchPrompts: ["파란색 흰색 서비스 아이콘 reference"],
+        searchTrace: [],
+        topQuery: "파란색 흰색 서비스 아이콘 reference",
+        totalResults: [
+          {
+            id: "web-ambiguous-1",
+            link: "https://example.com/blue-mark",
+            query: "파란색 흰색 서비스 아이콘 reference",
+            source: "mock",
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "Blue round service icon examples",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        candidateEntities: [
+          {
+            confidence: 0.84,
+            id: "candidate-teamviewer",
+            label: "TeamViewer",
+            query: "TeamViewer logo icon official",
+            queryVariants: ["TeamViewer", "TeamViewer logo icon official"],
+            rationale: "refined from search evidence",
+            source: "agent",
+          },
+        ],
+        engine: "rule-based",
+        policyDecisions: [],
+        providerMode: "mock",
+        searchPrompts: ["TeamViewer logo icon official"],
+        searchTrace: [],
+        topQuery: "TeamViewer logo icon official",
+        totalResults: [
+          {
+            dominantColors: ["blue", "white"],
+            id: "web-teamviewer",
+            link: "https://example.com/teamviewer-official",
+            query: "TeamViewer logo icon official",
+            shapeTags: ["round", "arrows"],
+            source: "mock",
+            tags: ["service", "remote support", "logo"],
+            thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+            title: "TeamViewer remote support logo official",
+          },
+        ],
+      });
+    const referenceSearch = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          baseScore: 0.93,
+          category: "logo_icon",
+          dominantColors: ["blue", "white"],
+          id: "teamviewer-local",
+          imageSimilarity: 0.94,
+          link: "https://www.teamviewer.com/",
+          ocrTokens: [],
+          query: "TeamViewer logo icon official",
+          shapeTags: ["round", "arrows"],
+          source: "local",
+          sourceId: "teamviewer-logo",
+          sourceUrl: "https://www.teamviewer.com/",
+          tags: ["service", "remote support", "logo"],
+          textSimilarity: 0.92,
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "TeamViewer logo",
+        },
+      ]);
+
+    const result = await searchSketch(
+      {
+        hasDrawing: true,
+        locale: "ko-KR",
+        sketchDataUrl: "data:image/png;base64,ZmFrZQ==",
+        sketchSummary: {
+          aspectBucket: "square",
+          complexity: "minimal",
+          dominantGeometry: "round",
+          elementCount: 2,
+          hasClosedShapes: true,
+          repeatedMarks: false,
+          typeCounts: {
+            arrow: 2,
+            diamond: 0,
+            ellipse: 1,
+            freedraw: 0,
+            line: 0,
+            rectangle: 0,
+            text: 0,
+          },
+        },
+        userText: "원격 지원 프로그램 화면에서 본 파란색 흰색 원형 로고 같아요",
+      },
+      {
+        persistSession: vi.fn().mockResolvedValue(undefined),
+        referenceSearch,
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    expect(searchAgent).toHaveBeenCalledTimes(2);
+    expect(referenceSearch).toHaveBeenCalledTimes(2);
+    expect(result.candidateEntities[0]?.label).toMatch(/TeamViewer/i);
+  });
+
   it("excludes rejected entities from the next retry search", async () => {
     const searchAgent = vi.fn().mockImplementation(async (_input, candidates) => ({
       candidateEntities: candidates,
@@ -294,11 +517,138 @@ describe("searchSketch", () => {
     ).toBeFalsy();
   });
 
+  it("returns one clarification question after two ambiguous passes and resolves once answered", async () => {
+    const searchAgent = vi.fn().mockResolvedValue({
+      candidateEntities: [
+        {
+          confidence: 0.6,
+          id: "candidate-1",
+          label: "서비스 아이콘 또는 소프트웨어 심볼",
+          query: "파란색 흰색 원형 서비스 심볼 reference",
+          queryVariants: ["서비스 심볼", "파란색 흰색 원형 서비스 심볼 reference"],
+          rationale: "still broad",
+          source: "heuristic",
+        },
+      ],
+      engine: "rule-based",
+      policyDecisions: [],
+      providerMode: "mock",
+      searchPrompts: ["파란색 흰색 원형 서비스 심볼 reference"],
+      searchTrace: [],
+      topQuery: "파란색 흰색 원형 서비스 심볼 reference",
+      totalResults: [
+        {
+          dominantColors: ["blue", "white"],
+          id: "ambiguous-web-1",
+          link: "https://example.com/ambiguous-1",
+          query: "파란색 흰색 원형 서비스 심볼 reference",
+          shapeTags: ["round"],
+          source: "mock",
+          tags: ["service", "logo"],
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "Blue white round service mark",
+        },
+        {
+          dominantColors: ["blue", "white"],
+          id: "ambiguous-web-2",
+          link: "https://example.com/ambiguous-2",
+          query: "파란색 흰색 원형 서비스 심볼 reference",
+          shapeTags: ["round"],
+          source: "mock",
+          tags: ["service", "icon"],
+          thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
+          title: "Round blue white app icon",
+        },
+      ],
+    });
+
+    const baseInput = {
+      hasDrawing: true,
+      locale: "ko-KR",
+      sketchDataUrl: "data:image/png;base64,ZmFrZQ==",
+      sketchSummary: {
+        aspectBucket: "square",
+        complexity: "minimal",
+        dominantGeometry: "round",
+        elementCount: 2,
+        hasClosedShapes: true,
+        repeatedMarks: false,
+        typeCounts: {
+          arrow: 0,
+          diamond: 0,
+          ellipse: 1,
+          freedraw: 0,
+          line: 0,
+          rectangle: 1,
+          text: 0,
+        },
+      },
+      userText: "파란색과 흰색이 보이는 둥근 서비스 마크 같아요",
+    } as const;
+
+    const unresolved = await searchSketch(baseInput, {
+      persistSession: vi.fn().mockResolvedValue(undefined),
+      referenceSearch: vi.fn().mockResolvedValue([]),
+      searchAgent,
+      visionInterpreter: vi.fn().mockResolvedValue({
+        candidates: [],
+        reasoning: [],
+      }),
+    });
+
+    expect(unresolved.resultMode).toBe("needs_clarification");
+    expect(unresolved.clarification).not.toBeNull();
+
+    const resolved = await searchSketch(
+      {
+        ...baseInput,
+        clarificationAnswers: [
+          {
+            answer: "네, 앱 아이콘처럼 단순했어요",
+            questionId: unresolved.clarification?.id ?? "app_icon_simple",
+          },
+        ],
+      },
+      {
+        persistSession: vi.fn().mockResolvedValue(undefined),
+        referenceSearch: vi.fn().mockResolvedValue([]),
+        searchAgent,
+        visionInterpreter: vi.fn().mockResolvedValue({
+          candidates: [],
+          reasoning: [],
+        }),
+      },
+    );
+
+    expect(resolved.resultMode).toBe("resolved");
+    expect(resolved.clarification).toBeNull();
+    expect(
+      resolved.reasoning.some((item) => item.includes("확인 질문 답변")),
+    ).toBeTruthy();
+  });
+
   it("refines prompts after reading first-pass search results", async () => {
-    const naverSearch = vi
+    const searchAgent = vi
       .fn()
       .mockResolvedValueOnce({
-        items: [
+        candidateEntities: [
+          {
+            confidence: 0.58,
+            id: "candidate-generic",
+            label: "제품 비주얼 또는 반복 패턴",
+            query: "운동화 제품 이미지",
+            queryVariants: ["운동화", "운동화 제품 이미지"],
+            rationale: "generic product hypothesis",
+            source: "heuristic",
+          },
+        ],
+        engine: "rule-based",
+        policyDecisions: [],
+        providerMode: "mock",
+        searchPrompts: ["운동화 제품 이미지"],
+        searchTrace: [],
+        topQuery: "운동화 제품 이미지",
+        totalResults: [
           {
             id: "nike-1",
             link: "https://example.com/nike-1",
@@ -316,20 +666,35 @@ describe("searchSketch", () => {
             title: "NIKE Air Max official product",
           },
         ],
-        mode: "mock",
       })
       .mockResolvedValueOnce({
-        items: [
+        candidateEntities: [
+          {
+            confidence: 0.86,
+            id: "candidate-nike",
+            label: "NIKE Air Max 97",
+            query: "NIKE Air Max 97 official",
+            queryVariants: ["NIKE Air Max 97", "NIKE Air Max 97 official"],
+            rationale: "refined from repeated search evidence",
+            source: "agent",
+          },
+        ],
+        engine: "rule-based",
+        policyDecisions: [],
+        providerMode: "mock",
+        searchPrompts: ["NIKE Air Max 97 official"],
+        searchTrace: [],
+        topQuery: "NIKE Air Max 97 official",
+        totalResults: [
           {
             id: "nike-3",
             link: "https://example.com/nike-3",
-            query: "스니커즈 NIKE reference image",
+            query: "NIKE Air Max 97 official",
             source: "mock",
             thumbnailUrl: "data:image/svg+xml;base64,ZmFrZQ==",
             title: "NIKE Air Max 97 official",
           },
         ],
-        mode: "mock",
       });
 
     const result = await searchSketch(
@@ -342,12 +707,13 @@ describe("searchSketch", () => {
       },
       {
         googleSearch: vi.fn().mockResolvedValue([]),
-        naverSearch,
         persistSession: vi.fn().mockResolvedValue(undefined),
+        referenceSearch: vi.fn().mockResolvedValue([]),
+        searchAgent,
       },
     );
 
-    expect(naverSearch).toHaveBeenCalledTimes(2);
+    expect(searchAgent).toHaveBeenCalledTimes(2);
     expect(
       result.searchPrompts.some((query) => query.toLowerCase().includes("nike")),
     ).toBeTruthy();

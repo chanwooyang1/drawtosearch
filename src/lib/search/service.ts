@@ -377,10 +377,11 @@ export async function searchSketch(
 
   const clarification =
     !input.clarificationAnswers?.length && reranked.clarificationNeeded
-      ? buildClarificationPrompt({
+      ? await buildClarificationPrompt({
           evidence,
           hypotheses: activeHypotheses,
           results: reranked.results,
+          searchInput: input,
         })
       : null;
   const resultMode = clarification ? "needs_clarification" : "resolved";

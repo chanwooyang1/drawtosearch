@@ -109,6 +109,18 @@ function mapClarificationTokens(answers: SearchClarificationAnswer[] | null | un
           return answer.includes("앱") || answer.includes("단순")
             ? [...base, "service", "icon", "simple"]
             : [...base, "logo", "symbol"];
+        case "color_palette":
+          return answer.includes("적은 색") || answer.includes("파란색") || answer.includes("흰색")
+            ? [...base, "blue", "white", "limited palette", "icon"]
+            : [...base, "multicolor"];
+        case "directional_shape":
+          return answer.includes("방향성") || answer.includes("화살표") || answer.includes("삼각형")
+            ? [...base, "arrows", "directional", "remote support"]
+            : [...base, "not arrows"];
+        case "geometry_round":
+          return answer.includes("원형") || answer.includes("배지") || answer.includes("감싸")
+            ? [...base, "round", "circle", "closed shapes"]
+            : [...base, "angular", "open shape"];
         case "arrows_mark":
           return answer.includes("네")
             ? [...base, "arrows", "remote support", "service"]
@@ -230,4 +242,3 @@ export function buildEvidenceBundle(input: {
     textDescriptorText,
   };
 }
-
